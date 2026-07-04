@@ -1,0 +1,6 @@
+{
+  "name": "غزة كاش",
+  "description": "نظام غزة كاش المتكامل لإدارة المبيعات ونقاط البيع، الفروع والمخازن، الحسابات والعملاء والموردين، مع كشوف الحساب المفصلة، الفواتير الذكية، والتحليلات بالذكاء الاصطناعي.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -18,6 +18,7 @@ interface TransactionsProps {
   onSaveReturn: (ret: Omit<SalesReturn, 'id' | 'returnNo' | 'date'>) => void;
   onSaveQuotation: (quo: Omit<Quotation, 'id' | 'quotationNo' | 'date'>) => void;
   activeCurrency?: Currency;
+  initialTab?: 'purchase' | 'return' | 'quotation';
 }
 
 export default function Transactions({
@@ -30,11 +31,18 @@ export default function Transactions({
   onSavePurchase,
   onSaveReturn,
   onSaveQuotation,
-  activeCurrency
+  activeCurrency,
+  initialTab
 }: TransactionsProps) {
   const currency = activeCurrency || { id: 'ILS', name: 'شيكل', symbol: '₪', exchangeRate: 1, isBase: true };
 
-  const [activeTab, setActiveTab] = useState<'purchase' | 'return' | 'quotation'>('purchase');
+  const [activeTab, setActiveTab] = React.useState<'purchase' | 'return' | 'quotation'>(initialTab || 'purchase');
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Supplier Purchase states
   const [purchaseCart, setPurchaseCart] = useState<{

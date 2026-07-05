@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Group, Item, Branch, BranchStock, CustomerSupplier, Sale, Purchase, SalesReturn, Quotation, BranchTransfer, ItemMovement, AuditLogEntry, Currency } from './types';
+import { Group, Item, Branch, BranchStock, CustomerSupplier, Sale, Purchase, SalesReturn, Quotation, BranchTransfer, ItemMovement, AuditLogEntry, Currency, Appointment } from './types';
 
 export interface GroupData {
   items: Item[];
@@ -19,6 +19,7 @@ export interface GroupData {
   auditLogs?: AuditLogEntry[];
   currencies?: Currency[];
   selectedCurrencyId?: string;
+  appointments?: Appointment[];
 }
 
 const DEFAULT_GROUPS: Group[] = [
@@ -671,7 +672,8 @@ export const getGroupData = (groupId: string): GroupData => {
       quotations: [],
       transfers: [],
       movements: [],
-      auditLogs: []
+      auditLogs: [],
+      appointments: []
     };
   }
   
@@ -692,7 +694,7 @@ export const saveGroupData = (groupId: string, data: GroupData) => {
 
 export const getTheme = (): 'light' | 'dark' => {
   const theme = localStorage.getItem('gaza_cash_theme');
-  return (theme as 'light' | 'dark') || 'dark';
+  return (theme as 'light' | 'dark') || 'light';
 };
 
 export const setTheme = (theme: 'light' | 'dark') => {

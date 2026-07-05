@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Package, Plus, MapPin, ArrowRightLeft, FileText, ClipboardList, AlertTriangle, Save, RefreshCw, Trash, Upload, FileSpreadsheet } from 'lucide-react';
+import { Package, Plus, MapPin, ArrowRightLeft, FileText, ClipboardList, AlertTriangle, Save, RefreshCw, Trash, Upload, FileSpreadsheet, Pencil } from 'lucide-react';
 import { Item, Branch, BranchStock, BranchTransfer, ItemMovement, Currency } from '../types';
 
 interface InventoryProps {
@@ -15,9 +15,12 @@ interface InventoryProps {
   onAddItem: (item: Omit<Item, 'id'>) => void;
   onUpdateItem: (id: string, item: Partial<Item>) => void;
   onAddBranch: (branch: Omit<Branch, 'id'>) => void;
+  onUpdateBranch?: (id: string, branch: Partial<Branch>) => void;
   onTransferStock: (transfer: Omit<BranchTransfer, 'id' | 'transferNo' | 'date'>) => void;
   onImportItemsAndStock?: (imported: Array<{ item: Omit<Item, 'id'>, qty: number }>) => void;
+  onAdjustStock?: (itemId: string, branchId: string, actualQty: number, notes: string) => void;
   activeCurrency?: Currency;
+  initialTab?: 'items' | 'branches' | 'transfers' | 'ledger' | 'import' | 'adjust';
 }
 
 export default function Inventory({
@@ -28,14 +31,23 @@ export default function Inventory({
   onAddItem,
   onUpdateItem,
   onAddBranch,
+  onUpdateBranch,
   onTransferStock,
   onImportItemsAndStock,
-  activeCurrency
+  onAdjustStock,
+  activeCurrency,
+  initialTab
 }: InventoryProps) {
   const currency = activeCurrency || { id: 'ILS', name: 'شيكل', symbol: '₪', exchangeRate: 1, isBase: true };
 
   // Navigation Tabs within Inventory module
-  const [activeTab, setActiveTab] = useState<'items' | 'branches' | 'transfers' | 'ledger' | 'import'>('items');
+  const [activeTab, setActiveTab] = React.useState<'items' | 'branches' | 'transfers' | 'ledger' | 'import' | 'adjust'>(initialTab || 'items');
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Form states - Add Item
   const [itemName, setItemName] = useState('');
@@ -54,6 +66,7 @@ export default function Inventory({
   // Form states - Add Branch
   const [branchName, setBranchName] = useState('');
   const [branchLocation, setBranchLocation] = useState('');
+  const [selectedEditBranchId, setSelectedEditBranchId] = useState<string | null>(null);
 
   // Form states - Stock Transfer
   const [fromBranch, setFromBranch] = useState('');
@@ -65,6 +78,12 @@ export default function Inventory({
   // Form states - Item movement ledger (كشف حركات الصنف لوحده)
   const [selectedLedgerItemId, setSelectedLedgerItemId] = useState(items[0]?.id || '');
   const [selectedLedgerBranchId, setSelectedLedgerBranchId] = useState('all');
+
+  // Form states - Physical Inventory Count & Adjustment
+  const [adjustBranchId, setAdjustBranchId] = useState(branches[0]?.id || '');
+  const [adjustSearchTerm, setAdjustSearchTerm] = useState('');
+  const [physicalCounts, setPhysicalCounts] = useState<Record<string, string>>({});
+  const [adjustNotes, setAdjustNotes] = useState<Record<string, string>>({});
 
   // Helper: Get stock for item in a specific branch
   const getBranchStockQty = (itemId: string, branchId: string): number => {
@@ -221,13 +240,30 @@ export default function Inventory({
     setActiveTab('items');
   };
 
+  const handleEditBranch = (branch: Branch) => {
+    setSelectedEditBranchId(branch.id);
+    setBranchName(branch.name);
+    setBranchLocation(branch.location || '');
+    setActiveTab('branches');
+  };
+
   const handleAddBranchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!branchName) return;
-    onAddBranch({
-      name: branchName,
-      location: branchLocation
-    });
+    
+    if (selectedEditBranchId) {
+      if (onUpdateBranch) {
+        onUpdateBranch(selectedEditBranchId, { name: branchName, location: branchLocation });
+      }
+      setSelectedEditBranchId(null);
+      alert('تم تعديل بيانات المستودع بنجاح!');
+    } else {
+      onAddBranch({
+        name: branchName,
+        location: branchLocation
+      });
+      alert('تم إضافة المستودع بنجاح!');
+    }
     setBranchName('');
     setBranchLocation('');
   };
@@ -280,6 +316,43 @@ export default function Inventory({
 
   const ledgerItem = items.find(i => i.id === selectedLedgerItemId);
 
+  const handleApplyAdjustments = () => {
+    if (!onAdjustStock) {
+      alert('ميزة التعديل غير متوفرة حالياً.');
+      return;
+    }
+
+    const itemsToAdjust = items.filter(item => {
+      const bookQty = getBranchStockQty(item.id, adjustBranchId);
+      const physicalVal = physicalCounts[item.id];
+      if (physicalVal === undefined || physicalVal === '') return false;
+      const actualQty = parseFloat(physicalVal);
+      return !isNaN(actualQty) && actualQty !== bookQty;
+    });
+
+    if (itemsToAdjust.length === 0) {
+      alert('لم يتم العثور على أي تغييرات في الكميات الفعلية عن الكميات الدفترية لتسويتها.');
+      return;
+    }
+
+    const confirmMsg = `هل أنت متأكد من اعتماد تسوية الجرد الفعلي لـ (${itemsToAdjust.length}) أصناف في الفرع المحدد؟\nسيتم تعديل رصيد المخزن تلقائياً وتوليد حركات تسوية مخزنية محاسبية معتمدة.`;
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+
+    let successCount = 0;
+    itemsToAdjust.forEach(item => {
+      const actualQty = parseFloat(physicalCounts[item.id]);
+      const notes = adjustNotes[item.id] || 'تسوية جرد دوري';
+      onAdjustStock(item.id, adjustBranchId, actualQty, notes);
+      successCount++;
+    });
+
+    alert(`تم بنجاح اعتماد تسوية جرد المستودع وتعديل المخزون لـ ${successCount} أصناف بنجاح!`);
+    setPhysicalCounts({});
+    setAdjustNotes({});
+  };
+
   return (
     <div className="flex flex-col space-y-6 h-full">
       {/* Tab bar header */}
@@ -314,6 +387,12 @@ export default function Inventory({
           className={`pb-3 font-bold text-sm transition-all relative flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${activeTab === 'import' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           <Upload size={16} /> استيراد رصيد أول المدة (إكسل)
+        </button>
+        <button
+          onClick={() => setActiveTab('adjust')}
+          className={`pb-3 font-bold text-sm transition-all relative flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${activeTab === 'adjust' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
+        >
+          <ClipboardList size={16} className="text-amber-500" /> جرد وتعديل المخزون الفعلي
         </button>
       </div>
 
@@ -569,8 +648,24 @@ export default function Inventory({
       {activeTab === 'branches' && (
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
           <div className="md:col-span-4 rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
-            <h3 className="font-bold text-md text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-              <MapPin size={18} className="text-emerald-500" /> إضافة مستودع أو فرع جديد
+            <h3 className="font-bold text-md text-slate-800 dark:text-slate-100 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <MapPin size={18} className="text-emerald-500" /> 
+                {selectedEditBranchId ? 'تعديل المستودع / الفرع' : 'إضافة مستودع أو فرع جديد'}
+              </span>
+              {selectedEditBranchId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedEditBranchId(null);
+                    setBranchName('');
+                    setBranchLocation('');
+                  }}
+                  className="text-xs font-bold text-red-500 hover:underline cursor-pointer"
+                >
+                  إلغاء التعديل
+                </button>
+              )}
             </h3>
             <form onSubmit={handleAddBranchSubmit} className="space-y-3">
               <div className="space-y-1">
@@ -600,7 +695,7 @@ export default function Inventory({
                 type="submit"
                 className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded-xl text-sm shadow transition cursor-pointer"
               >
-                حفظ المستودع
+                {selectedEditBranchId ? 'تعديل المستودع' : 'حفظ المستودع'}
               </button>
             </form>
           </div>
@@ -619,9 +714,18 @@ export default function Inventory({
                         <h4 className="font-bold text-slate-950 dark:text-white text-base">{b.name}</h4>
                         <p className="text-xs text-slate-500">{b.location}</p>
                       </div>
-                      <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] px-2 py-0.5 rounded-full font-bold">
-                        نشط
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleEditBranch(b)}
+                          className="p-1.5 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 transition-all cursor-pointer"
+                          title="تعديل بيانات المستودع"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                        <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                          نشط
+                        </span>
+                      </div>
                     </div>
                     <div className="border-t border-slate-100 dark:border-slate-800/80 pt-2 flex justify-between text-xs text-slate-600 dark:text-slate-400">
                       <span>الأصناف المتوفرة بالفرع:</span>
@@ -1032,6 +1136,218 @@ export default function Inventory({
                 </ul>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. TAB: PHYSICAL INVENTORY COUNT & STOCK ADJUSTMENT */}
+      {activeTab === 'adjust' && (
+        <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+            <div>
+              <h3 className="font-extrabold text-md text-slate-900 dark:text-white flex items-center gap-1.5">
+                <ClipboardList className="text-amber-500" size={20} /> جرد وتعديل مخزون المستودعات الفعلي
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                قارن بين رصيد المخزن الدفتري في النظام والجرد الفعلي على أرض الواقع، وقم بإجراء تسويات عجز أو زيادة المخزون بضغطة واحدة.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => {
+                  const prefilled: Record<string, string> = {};
+                  items.forEach(item => {
+                    const qty = getBranchStockQty(item.id, adjustBranchId);
+                    prefilled[item.id] = qty.toString();
+                  });
+                  setPhysicalCounts(prefilled);
+                }}
+                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold py-2 px-3.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw size={13} className="text-slate-500" /> تعبئة الكل بالرصيد الدفتري
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm('هل أنت متأكد من مسح جميع القيم المدخلة في الجرد؟')) {
+                    setPhysicalCounts({});
+                    setAdjustNotes({});
+                  }
+                }}
+                className="bg-rose-550 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-xs font-bold py-2 px-3.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash size={13} /> مسح المدخلات
+              </button>
+            </div>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-slate-500/5 p-4 rounded-2xl border border-white/5">
+            <div className="md:col-span-4 space-y-1.5">
+              <label className="text-xs font-bold text-slate-600 dark:text-slate-400">حدد الفرع / المستودع للجرد:</label>
+              <select
+                value={adjustBranchId}
+                onChange={(e) => {
+                  setAdjustBranchId(e.target.value);
+                  setPhysicalCounts({}); // Reset physical counts to avoid cross-branch confusion
+                }}
+                className="w-full p-2.5 rounded-xl glass-input text-sm text-slate-800 dark:text-white font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              >
+                {branches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="md:col-span-8 space-y-1.5">
+              <label className="text-xs font-bold text-slate-600 dark:text-slate-400 font-sans">ابحث عن صنف بالاسم أو الباركود لتسجيل الجرد:</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={adjustSearchTerm}
+                  onChange={(e) => setAdjustSearchTerm(e.target.value)}
+                  placeholder="اكتب الباركود أو اسم الصنف للبحث السريع وتعبئة الجرد..."
+                  className="w-full p-2.5 rounded-xl glass-input text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 pr-10"
+                />
+                <Package size={16} className="absolute right-3.5 top-3.5 text-slate-400" />
+              </div>
+            </div>
+          </div>
+
+          {/* Counting Table */}
+          <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-xl">
+            <table className="w-full text-right border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-500/5 text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-800">
+                  <th className="p-3.5 font-bold">الباركود</th>
+                  <th className="p-3.5 font-bold">اسم الصنف والتصنيف</th>
+                  <th className="p-3.5 font-bold text-center">الكمية الدفترية (الحالية)</th>
+                  <th className="p-3.5 font-bold text-center w-40">الكمية الفعلية بالجرد</th>
+                  <th className="p-3.5 font-bold text-center">الفارق المخزني</th>
+                  <th className="p-3.5 font-bold">سبب التعديل / ملاحظات العجز والتلف</th>
+                  <th className="p-3.5 font-bold text-center">إجراء سريع</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-slate-800 dark:text-slate-200">
+                {items
+                  .filter(item => {
+                    const term = adjustSearchTerm.toLowerCase();
+                    return item.name.toLowerCase().includes(term) || (item.barcode && item.barcode.includes(term)) || (item.category && item.category.toLowerCase().includes(term));
+                  })
+                  .map(item => {
+                    const bookQty = getBranchStockQty(item.id, adjustBranchId);
+                    const physicalVal = physicalCounts[item.id] !== undefined ? physicalCounts[item.id] : '';
+                    const actualQty = physicalVal !== '' ? parseFloat(physicalVal) : bookQty;
+                    const diff = actualQty - bookQty;
+
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-500/5 transition-colors">
+                        <td className="p-3.5 font-mono text-slate-500 text-xs">{item.barcode || '—'}</td>
+                        <td className="p-3.5">
+                          <div className="font-bold text-slate-900 dark:text-white text-sm">{item.name}</div>
+                          {item.category && <div className="text-[10px] text-slate-400 mt-0.5">{item.category}</div>}
+                        </td>
+                        <td className="p-3.5 text-center font-bold text-slate-900 dark:text-white text-sm">
+                          {bookQty} <span className="text-[10px] text-slate-500 font-normal">{item.mainUnit}</span>
+                        </td>
+                        <td className="p-3.5 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newVal = Math.max(0, actualQty - 1);
+                                setPhysicalCounts({ ...physicalCounts, [item.id]: newVal.toString() });
+                              }}
+                              className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 font-bold flex items-center justify-center"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              step="any"
+                              value={physicalVal}
+                              placeholder={bookQty.toString()}
+                              onChange={(e) => {
+                                setPhysicalCounts({ ...physicalCounts, [item.id]: e.target.value });
+                              }}
+                              className="w-16 p-1 rounded border border-slate-200 dark:border-slate-800 text-center font-bold text-sm bg-white dark:bg-slate-950 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newVal = actualQty + 1;
+                                setPhysicalCounts({ ...physicalCounts, [item.id]: newVal.toString() });
+                              }}
+                              className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 font-bold flex items-center justify-center"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </td>
+                        <td className="p-3.5 text-center">
+                          {diff === 0 ? (
+                            <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                              مطابق
+                            </span>
+                          ) : diff > 0 ? (
+                            <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+                              +{diff.toFixed(2)} زيادة
+                            </span>
+                          ) : (
+                            <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+                              {diff.toFixed(2)} عجز
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3.5">
+                          <input
+                            type="text"
+                            value={adjustNotes[item.id] || ''}
+                            onChange={(e) => {
+                              setAdjustNotes({ ...adjustNotes, [item.id]: e.target.value });
+                            }}
+                            placeholder="مثال: تلف، عجز جرد، كسر..."
+                            className="w-full p-1.5 rounded border border-slate-200 dark:border-slate-800 text-xs bg-white dark:bg-slate-950 focus:outline-none"
+                          />
+                        </td>
+                        <td className="p-3.5 text-center">
+                          <button
+                            type="button"
+                            disabled={diff === 0}
+                            onClick={() => {
+                              if (!onAdjustStock) return;
+                              onAdjustStock(item.id, adjustBranchId, actualQty, adjustNotes[item.id] || 'تسوية جرد يدوي منفرد');
+                              alert(`تم تعديل وتسوية صنف "${item.name}" بنجاح!`);
+                              const pc = { ...physicalCounts };
+                              delete pc[item.id];
+                              setPhysicalCounts(pc);
+                              const an = { ...adjustNotes };
+                              delete an[item.id];
+                              setAdjustNotes(an);
+                            }}
+                            className={`px-2.5 py-1 rounded text-[10px] font-extrabold transition cursor-pointer flex items-center gap-1 mx-auto ${diff === 0 ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed' : 'bg-amber-500 hover:bg-amber-600 text-white shadow-sm'}`}
+                          >
+                            <Save size={10} /> حفظ البند
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Form Submit Footer */}
+          <div className="bg-slate-500/5 p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 border border-white/5">
+            <div className="text-xs text-slate-600 dark:text-slate-300">
+              <span className="font-bold text-slate-800 dark:text-white">إحصائيات التسوية الحالية: </span>
+              الأصناف المعدلة ستدرج تلقائياً في دفتر حركات المخزون كـ "تسوية يدوية" مع احتساب فرق الأرباح/الخسائر الناتجة عن التلف والعجز.
+            </div>
+            <button
+              onClick={handleApplyAdjustments}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-lg transition flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Save size={15} /> اعتماد وحفظ جميع تسويات الجرد المحددة
+            </button>
           </div>
         </div>
       )}

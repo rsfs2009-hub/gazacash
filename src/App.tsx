@@ -50,7 +50,7 @@ import {
   GroupData
 } from './db';
 
-import { Group, Item, Branch, CustomerSupplier, Sale, Purchase, SalesReturn, Quotation, BranchTransfer, ItemMovement, BranchStock, AuditLogEntry, Currency } from './types';
+import { Group, Item, Branch, CustomerSupplier, Sale, Purchase, SalesReturn, Quotation, BranchTransfer, ItemMovement, BranchStock, AuditLogEntry, Currency, Appointment } from './types';
 
 // Importing ERP Modules
 import POS from './components/POS';
@@ -182,9 +182,12 @@ export default function App() {
     movements: []
   });
 
-  const [themeMode, setThemeState] = useState<'light' | 'dark'>('dark');
+  const [themeMode, setThemeState] = useState<'light' | 'dark'>(getTheme);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'contacts' | 'transactions' | 'reports' | 'settings'>('dashboard');
-  const [reportsSubTab, setReportsSubTab] = useState<'sales' | 'purchases' | 'accounts' | 'stock'>('sales');
+  const [reportsSubTab, setReportsSubTab] = useState<'sales' | 'purchases' | 'accounts' | 'stock' | 'trial-balance' | 'final-accounts' | 'profits'>('sales');
+  const [inventorySubTab, setInventorySubTab] = useState<'items' | 'branches' | 'transfers' | 'ledger' | 'import' | 'adjust'>('items');
+  const [transactionsSubTab, setTransactionsSubTab] = useState<'purchase' | 'return' | 'quotation'>('purchase');
+  const [contactsSubTab, setContactsSubTab] = useState<'list' | 'ledger'>('list');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // New Group Creator States
@@ -1019,16 +1022,44 @@ export default function App() {
   };
 
   // 6. Add Custom Items to Group Catalog
-  const handleAddItem = (newItem: Omit<Item, 'id'>) => {
+  const handleAddItem = (newItem: Omit<Item, 'id'>, initialQty?: number, branchId?: string) => {
     const itemWithId: Item = {
       ...newItem,
       id: `item_${Date.now()}`
     };
 
     const updatedItems = [...groupData.items, itemWithId];
+    const updatedBranchStock = [...groupData.branchStock];
+    const updatedMovements = [...groupData.movements];
+
+    if (initialQty && initialQty > 0) {
+      const activeBranch = branchId || 'branch_main';
+      const branchName = groupData.branches.find(b => b.id === activeBranch)?.name || 'الفرع الرئيسي';
+      updatedBranchStock.push({
+        itemId: itemWithId.id,
+        branchId: activeBranch,
+        quantity: initialQty
+      });
+      updatedMovements.push({
+        id: `mov_${Date.now()}_init_${itemWithId.id}`,
+        itemId: itemWithId.id,
+        itemName: itemWithId.name,
+        date: new Date().toISOString(),
+        type: 'initial',
+        referenceNo: 'BEGIN-FAST',
+        branchId: activeBranch,
+        branchName: branchName,
+        quantityChange: initialQty,
+        unitName: itemWithId.mainUnit,
+        description: `رصيد أول المدة مضاف من كاشير الفاتورة`
+      });
+    }
+
     saveStateToDB({
       ...groupData,
-      items: updatedItems
+      items: updatedItems,
+      branchStock: updatedBranchStock,
+      movements: updatedMovements
     });
   };
 
@@ -1120,6 +1151,67 @@ export default function App() {
     });
   };
 
+  // Manual Stock Adjustment & Physical Inventory Count
+  const handleAdjustStock = (itemId: string, branchId: string, actualQty: number, notes: string) => {
+    const updatedBranchStock = [...groupData.branchStock];
+    const updatedMovements = [...groupData.movements];
+
+    const stockIdx = updatedBranchStock.findIndex(st => st.itemId === itemId && st.branchId === branchId);
+    const item = groupData.items.find(i => i.id === itemId);
+    const branch = groupData.branches.find(b => b.id === branchId) || { name: 'الفرع الرئيسي', id: branchId };
+
+    const currentQty = stockIdx > -1 ? updatedBranchStock[stockIdx].quantity : 0;
+    const diff = actualQty - currentQty;
+
+    if (diff === 0) {
+      alert('الكمية الحالية مطابقة للكمية الفعلية المدخلة، لم يتم إجراء أي تعديل.');
+      return;
+    }
+
+    if (stockIdx > -1) {
+      updatedBranchStock[stockIdx].quantity = actualQty;
+    } else {
+      updatedBranchStock.push({
+        itemId,
+        branchId,
+        quantity: actualQty
+      });
+    }
+
+    // Record adjustment movement (تسوية مخزنية)
+    updatedMovements.push({
+      id: `mov_${Date.now()}_adj_${itemId}`,
+      itemId,
+      itemName: item?.name || 'صنف غير معروف',
+      date: new Date().toISOString(),
+      type: 'manual_adjust',
+      referenceNo: `ADJ-${Date.now().toString().substr(-6)}`,
+      branchId,
+      branchName: branch.name,
+      quantityChange: diff,
+      unitName: item?.mainUnit || 'وحدة',
+      description: `تسوية جرد مخزني يدوي: تعديل من ${currentQty} إلى ${actualQty}. المبرر: ${notes || 'مطابقة جرد فعلي'}`
+    });
+
+    const finalLogs = appendAuditLog(
+      'تسوية جرد مخزني يدوي',
+      `جرد مخزني وتعديل الصنف: ${item?.name || ''} في فرع ${branch.name}. تم تعديل الرصيد بقيمة ${diff > 0 ? '+' : ''}${diff} ${item?.mainUnit || ''}. السبب: ${notes || 'مطابقة جرد فعلي'}`,
+      'warning',
+      {
+        ...groupData,
+        branchStock: updatedBranchStock,
+        movements: updatedMovements
+      }
+    );
+
+    saveStateToDB({
+      ...groupData,
+      branchStock: updatedBranchStock,
+      movements: updatedMovements,
+      auditLogs: finalLogs
+    });
+  };
+
   const handleUpdateItem = (id: string, updatedFields: Partial<Item>) => {
     const updatedItems = groupData.items.map(item => {
       if (item.id === id) {
@@ -1130,6 +1222,41 @@ export default function App() {
     saveStateToDB({
       ...groupData,
       items: updatedItems
+    });
+  };
+
+  const handleUpdateContact = (id: string, updatedFields: Partial<CustomerSupplier>) => {
+    const updatedContacts = groupData.contacts.map(c => {
+      if (c.id === id) {
+        let newCurrentBalance = c.currentBalance;
+        if (updatedFields.initialBalance !== undefined) {
+          const diff = updatedFields.initialBalance - c.initialBalance;
+          newCurrentBalance += diff;
+        }
+        return { 
+          ...c, 
+          ...updatedFields,
+          currentBalance: newCurrentBalance
+        };
+      }
+      return c;
+    });
+    saveStateToDB({
+      ...groupData,
+      contacts: updatedContacts
+    });
+  };
+
+  const handleUpdateBranch = (id: string, updatedFields: Partial<Branch>) => {
+    const updatedBranches = groupData.branches.map(b => {
+      if (b.id === id) {
+        return { ...b, ...updatedFields };
+      }
+      return b;
+    });
+    saveStateToDB({
+      ...groupData,
+      branches: updatedBranches
     });
   };
 
@@ -1159,6 +1286,21 @@ export default function App() {
     saveStateToDB({
       ...groupData,
       contacts: updatedContacts
+    });
+  };
+
+  // 8.5. Add Customer Appointment / Schedule (إضافة موعد أو مراجعة لعميل)
+  const handleAddAppointment = (newApp: Omit<Appointment, 'id' | 'status'>) => {
+    const appWithId: Appointment = {
+      ...newApp,
+      id: `app_${Date.now()}`,
+      status: 'pending'
+    };
+
+    const updatedApps = [appWithId, ...(groupData.appointments || [])];
+    saveStateToDB({
+      ...groupData,
+      appointments: updatedApps
     });
   };
 
@@ -1237,7 +1379,16 @@ export default function App() {
   };
 
   // 11. Update Active Group Settings (بيانات المحل والشعار والهاتف)
-  const handleUpdateSettings = (shopName: string, shopAddress: string, shopPhone: string, logoUrl: string, themeColor: string) => {
+  const handleUpdateSettings = (
+    shopName: string,
+    shopAddress: string,
+    shopPhone: string,
+    logoUrl: string,
+    themeColor: string,
+    showInvoiceDate: boolean,
+    showInvoiceBranch: boolean,
+    showInvoiceLogo: boolean
+  ) => {
     const updatedGroups = groups.map(g => {
       if (g.id === activeGroupId) {
         return {
@@ -1248,7 +1399,10 @@ export default function App() {
             address: shopAddress,
             phone: shopPhone,
             logoUrl: logoUrl,
-            themeColor: themeColor
+            themeColor: themeColor,
+            showInvoiceDate,
+            showInvoiceBranch,
+            showInvoiceLogo
           }
         };
       }
@@ -1588,6 +1742,95 @@ export default function App() {
               </button>
             </div>
 
+            {/* Quick Actions Panel */}
+            <div className="rounded-2xl glass-panel-card p-4 border border-white/25 shadow-md space-y-2.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block border-b border-slate-200 dark:border-slate-800/40 pb-2 mb-1">
+                إجراءات وعمليات سريعة ⚡
+              </span>
+              <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-700 dark:text-slate-300">
+                <button
+                  onClick={() => {
+                    setActiveTab('inventory');
+                    setInventorySubTab('items');
+                  }}
+                  className="p-2 rounded-xl bg-slate-500/5 hover:bg-emerald-500 hover:text-white transition text-right flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus size={12} className="text-emerald-500 shrink-0" />
+                  <span>إضافة صنف</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('transactions');
+                    setTransactionsSubTab('purchase');
+                  }}
+                  className="p-2 rounded-xl bg-slate-500/5 hover:bg-emerald-500 hover:text-white transition text-right flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ShoppingBag size={12} className="text-blue-500 shrink-0" />
+                  <span>فاتورة شراء</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('transactions');
+                    setTransactionsSubTab('return');
+                  }}
+                  className="p-2 rounded-xl bg-slate-500/5 hover:bg-emerald-500 hover:text-white transition text-right flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RotateCcw size={12} className="text-rose-500 shrink-0" />
+                  <span>مرتجع مبيعات</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('contacts');
+                    setContactsSubTab('list');
+                  }}
+                  className="p-2 rounded-xl bg-slate-500/5 hover:bg-emerald-500 hover:text-white transition text-right flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Users size={12} className="text-amber-500 shrink-0" />
+                  <span>سند مالي</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('contacts');
+                    setContactsSubTab('ledger');
+                  }}
+                  className="p-2 rounded-xl bg-slate-500/5 hover:bg-emerald-500 hover:text-white transition text-right flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ArrowDownLeft size={12} className="text-sky-500 shrink-0" />
+                  <span>كشف حساب</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('inventory');
+                    setInventorySubTab('transfers');
+                  }}
+                  className="p-2 rounded-xl bg-slate-500/5 hover:bg-emerald-500 hover:text-white transition text-right flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Layers size={12} className="text-indigo-500 shrink-0" />
+                  <span>تحويل مخزني</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('inventory');
+                    setInventorySubTab('adjust');
+                  }}
+                  className="p-2 rounded-xl bg-slate-500/5 hover:bg-emerald-500 hover:text-white transition text-right flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw size={12} className="text-cyan-500 shrink-0" />
+                  <span>تسوية وجرد</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('reports');
+                    setReportsSubTab('profits');
+                  }}
+                  className="p-2 rounded-xl bg-slate-500/5 hover:bg-emerald-500 hover:text-white transition text-right flex items-center gap-1.5 cursor-pointer"
+                >
+                  <TrendingUp size={12} className="text-emerald-500 shrink-0" />
+                  <span>الأرباح</span>
+                </button>
+              </div>
+            </div>
+
             {/* Quick shop card helper */}
             <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 p-4 text-white shadow-lg space-y-3">
               <div>
@@ -1808,6 +2051,10 @@ export default function App() {
               shopName={shopMeta.name}
               activeCurrency={activeCurrency}
               currencies={currencies}
+              onAddItem={handleAddItem}
+              onAddContact={handleAddContact}
+              onAddAppointment={handleAddAppointment}
+              appointments={groupData.appointments || []}
             />
           )}
 
@@ -1821,9 +2068,12 @@ export default function App() {
               onAddItem={handleAddItem}
               onUpdateItem={handleUpdateItem}
               onAddBranch={handleAddBranch}
+              onUpdateBranch={handleUpdateBranch}
               onTransferStock={handleSaveTransfer}
               onImportItemsAndStock={handleImportItemsAndStock}
+              onAdjustStock={handleAdjustStock}
               activeCurrency={activeCurrency}
+              initialTab={inventorySubTab}
             />
           )}
 
@@ -1840,6 +2090,7 @@ export default function App() {
               onSaveReturn={handleSaveReturn}
               onSaveQuotation={handleSaveQuotation}
               activeCurrency={activeCurrency}
+              initialTab={transactionsSubTab}
             />
           )}
 
@@ -1851,7 +2102,9 @@ export default function App() {
               purchases={groupData.purchases}
               returns={groupData.returns}
               onAddContact={handleAddContact}
+              onUpdateContact={handleUpdateContact}
               onRecordPayment={handleRecordPayment}
+              initialTab={contactsSubTab}
             />
           )}
 
@@ -1867,6 +2120,12 @@ export default function App() {
               currencies={currencies}
               initialTab={reportsSubTab}
               logoUrl={shopMeta.logoUrl || defaultLogo}
+              returns={groupData.returns}
+              branchStock={groupData.branchStock}
+              movements={groupData.movements}
+              showInvoiceDate={shopMeta.showInvoiceDate !== false}
+              showInvoiceBranch={shopMeta.showInvoiceBranch !== false}
+              showInvoiceLogo={shopMeta.showInvoiceLogo !== false}
             />
           )}
 
@@ -1887,12 +2146,18 @@ export default function App() {
                   onSubmit={(e) => {
                     e.preventDefault();
                     const fd = new FormData(e.currentTarget);
+                    const showInvoiceDate = fd.get('showInvoiceDate') === 'on';
+                    const showInvoiceBranch = fd.get('showInvoiceBranch') === 'on';
+                    const showInvoiceLogo = fd.get('showInvoiceLogo') === 'on';
                     handleUpdateSettings(
                       fd.get('shopName') as string,
                       fd.get('shopAddress') as string,
                       fd.get('shopPhone') as string,
                       logoPreview,
-                      selectedThemeColor
+                      selectedThemeColor,
+                      showInvoiceDate,
+                      showInvoiceBranch,
+                      showInvoiceLogo
                     );
                   }}
                   className="grid grid-cols-1 md:grid-cols-3 gap-4"
@@ -1974,6 +2239,53 @@ export default function App() {
                       className="w-full p-2.5 rounded-xl glass-input text-sm font-semibold text-slate-950 dark:text-white"
                       required
                     />
+                  </div>
+
+                  {/* Printed Invoice Customization */}
+                  <div className="md:col-span-3 space-y-2 border-t border-slate-100 dark:border-slate-800/60 pt-4">
+                    <label className="text-xs font-extrabold text-slate-800 dark:text-slate-200 block">تخصيص مظهر الفاتورة المطبوعة (Print Invoice Customization)</label>
+                    <p className="text-[10px] text-slate-500 mb-3">حدد العناصر والبيانات التي ترغب في إظهارها أو إخفائها عند طباعة الفواتير والسندات لعملائك.</p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800/60 bg-slate-500/5 hover:bg-slate-500/10 cursor-pointer select-none transition">
+                        <input
+                          type="checkbox"
+                          name="showInvoiceDate"
+                          defaultChecked={shopMeta.showInvoiceDate !== false}
+                          className="w-4 h-4 text-emerald-500 border-slate-300 dark:border-slate-700 rounded focus:ring-emerald-500 cursor-pointer"
+                        />
+                        <div className="space-y-0.5 text-right">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">إظهار تاريخ ووقت الفاتورة</span>
+                          <span className="text-[9px] text-slate-400 block">تفعيل لعرض وقت المعاملة الدقيق بالفاتورة</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800/60 bg-slate-500/5 hover:bg-slate-500/10 cursor-pointer select-none transition">
+                        <input
+                          type="checkbox"
+                          name="showInvoiceBranch"
+                          defaultChecked={shopMeta.showInvoiceBranch !== false}
+                          className="w-4 h-4 text-emerald-500 border-slate-300 dark:border-slate-700 rounded focus:ring-emerald-500 cursor-pointer"
+                        />
+                        <div className="space-y-0.5 text-right">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">إظهار اسم المستودع / الفرع</span>
+                          <span className="text-[9px] text-slate-400 block">تفعيل لعرض الفرع الذي خرجت منه البضاعة</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800/60 bg-slate-500/5 hover:bg-slate-500/10 cursor-pointer select-none transition">
+                        <input
+                          type="checkbox"
+                          name="showInvoiceLogo"
+                          defaultChecked={shopMeta.showInvoiceLogo !== false}
+                          className="w-4 h-4 text-emerald-500 border-slate-300 dark:border-slate-700 rounded focus:ring-emerald-500 cursor-pointer"
+                        />
+                        <div className="space-y-0.5 text-right">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">إظهار شعار الشركة</span>
+                          <span className="text-[9px] text-slate-400 block">تفعيل لعرض شعار المجموعة في رأس الفاتورة</span>
+                        </div>
+                      </label>
+                    </div>
                   </div>
 
                   {/* Theme Color Selector */}

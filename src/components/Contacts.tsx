@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Users, UserPlus, FileText, Printer, ShieldAlert, DollarSign, ArrowUpRight, ArrowDownLeft, Trash2, Plus } from 'lucide-react';
+import { Users, UserPlus, FileText, Printer, ShieldAlert, DollarSign, ArrowUpRight, ArrowDownLeft, Trash2, Plus, Pencil } from 'lucide-react';
 import { CustomerSupplier, CustomerSupplierStatement, Sale, Purchase, SalesReturn } from '../types';
 
 interface ContactsProps {
@@ -13,11 +13,19 @@ interface ContactsProps {
   purchases: Purchase[];
   returns: SalesReturn[];
   onAddContact: (contact: Omit<CustomerSupplier, 'id' | 'currentBalance'>) => void;
+  onUpdateContact: (id: string, contact: Partial<CustomerSupplier>) => void;
   onRecordPayment: (contactId: string, amount: number, type: 'receipt' | 'payment', notes: string) => void; // Receipt = customer pays us (reduces debit), Payment = we pay supplier (reduces credit)
+  initialTab?: 'list' | 'ledger';
 }
 
-export default function Contacts({ contacts, sales, purchases, returns, onAddContact, onRecordPayment }: ContactsProps) {
-  const [activeTab, setActiveTab] = useState<'list' | 'ledger'>('list');
+export default function Contacts({ contacts, sales, purchases, returns, onAddContact, onUpdateContact, onRecordPayment, initialTab }: ContactsProps) {
+  const [activeTab, setActiveTab] = React.useState<'list' | 'ledger'>(initialTab || 'list');
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Add contact form states
   const [contactName, setContactName] = useState('');
@@ -25,6 +33,7 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
   const [contactPhone, setContactPhone] = useState('');
   const [contactAddress, setContactAddress] = useState('');
   const [initialBalance, setInitialBalance] = useState<number>(0);
+  const [selectedEditContactId, setSelectedEditContactId] = useState<string | null>(null);
 
   // Register payment form states
   const [selectedContactId, setSelectedContactId] = useState('');
@@ -35,23 +44,49 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
   // Account Statement (كشف الحساب) states
   const [ledgerContactId, setLedgerContactId] = useState(contacts[0]?.id || '');
 
+  const handleEditContact = (contact: CustomerSupplier) => {
+    setSelectedEditContactId(contact.id);
+    setContactName(contact.name);
+    setContactType(contact.type);
+    setContactPhone(contact.phone || '');
+    setContactAddress(contact.address || '');
+    setInitialBalance(contact.initialBalance);
+    setActiveTab('list');
+
+    // Smooth scroll to the form container with slight delay to ensure tab switch is complete
+    setTimeout(() => {
+      const element = document.getElementById('contact-form-container');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+  };
+
   const handleAddContactSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!contactName) return;
 
-    onAddContact({
+    const contactPayload = {
       name: contactName,
       type: contactType,
       phone: contactPhone,
       address: contactAddress,
       initialBalance: +initialBalance
-    });
+    };
+
+    if (selectedEditContactId) {
+      onUpdateContact(selectedEditContactId, contactPayload);
+      setSelectedEditContactId(null);
+      alert('تم تحديث بيانات الحساب التجاري بنجاح!');
+    } else {
+      onAddContact(contactPayload);
+      alert('تم إضافة الحساب التجاري الجديد للمجموعة بنجاح!');
+    }
 
     setContactName('');
     setContactPhone('');
     setContactAddress('');
     setInitialBalance(0);
-    alert('تم إضافة الحساب التجاري الجديد للمجموعة بنجاح!');
   };
 
   const handlePaymentSubmit = (e: React.FormEvent) => {
@@ -216,9 +251,30 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
           {/* Quick Registration Form */}
           <div className="xl:col-span-4 flex flex-col space-y-6">
             {/* Form: Add Contact */}
-            <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
-              <h3 className="font-bold text-md text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                <UserPlus size={18} className="text-emerald-500" /> تسجيل حساب تجاري جديد
+            <div 
+              id="contact-form-container"
+              className={`rounded-2xl glass-panel-card p-5 border shadow-md space-y-4 transition-all duration-300 ${selectedEditContactId ? 'border-sky-500 ring-2 ring-sky-500/20 bg-sky-500/5 dark:bg-sky-500/5' : 'border-white/25'}`}
+            >
+              <h3 className="font-bold text-md text-slate-800 dark:text-slate-100 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <UserPlus size={18} className="text-emerald-500" />
+                  {selectedEditContactId ? 'تعديل بيانات الحساب التجاري' : 'تسجيل حساب تجاري جديد'}
+                </span>
+                {selectedEditContactId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedEditContactId(null);
+                      setContactName('');
+                      setContactPhone('');
+                      setContactAddress('');
+                      setInitialBalance(0);
+                    }}
+                    className="text-xs font-bold text-red-500 hover:underline cursor-pointer"
+                  >
+                    إلغاء التعديل
+                  </button>
+                )}
               </h3>
               
               <form onSubmit={handleAddContactSubmit} className="space-y-3">
@@ -291,7 +347,7 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
                   type="submit"
                   className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded-xl text-sm shadow transition cursor-pointer"
                 >
-                  حفظ الحساب الجديد
+                  {selectedEditContactId ? 'تحديث الحساب' : 'حفظ الحساب الجديد'}
                 </button>
               </form>
             </div>
@@ -385,6 +441,7 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
                     <th className="pb-3">العنوان</th>
                     <th className="pb-3 text-center">الرصيد الحالي</th>
                     <th className="pb-3 text-left pl-2">الحالة المالية</th>
+                    <th className="pb-3 text-center pl-2">تعديل</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -422,6 +479,15 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
                           ) : (
                             <span className="text-slate-500">خالص ومتوازن</span>
                           )}
+                        </td>
+                        <td className="py-3.5 text-center pl-2">
+                          <button
+                            onClick={() => handleEditContact(c)}
+                            className="p-1.5 rounded-lg bg-sky-500/15 text-sky-600 dark:text-sky-400 hover:bg-sky-500/25 transition-all cursor-pointer"
+                            title="تعديل بيانات الحساب"
+                          >
+                            <Pencil size={13} />
+                          </button>
                         </td>
                       </tr>
                     );

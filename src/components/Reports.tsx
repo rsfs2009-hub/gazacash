@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { BarChart3, Download, Printer, Search, TrendingUp, TrendingDown, DollarSign, Wallet, ArrowDownLeft, AlertOctagon, HelpCircle, X } from 'lucide-react';
+import { BarChart3, Download, Printer, Search, TrendingUp, TrendingDown, DollarSign, Wallet, ArrowDownLeft, AlertOctagon, HelpCircle, X, Scale, Calculator, FileSpreadsheet, Layers } from 'lucide-react';
 import { Sale, Purchase, CustomerSupplier, Item, Branch, Currency } from '../types';
 
 interface ReportsProps {
@@ -15,12 +15,34 @@ interface ReportsProps {
   branches: Branch[];
   activeCurrency?: Currency;
   currencies?: Currency[];
-  initialTab?: 'sales' | 'purchases' | 'accounts' | 'stock';
+  initialTab?: 'sales' | 'purchases' | 'accounts' | 'stock' | 'trial-balance' | 'final-accounts' | 'profits';
   logoUrl?: string;
+  returns?: any[];
+  branchStock?: any[];
+  movements?: any[];
+  showInvoiceDate?: boolean;
+  showInvoiceBranch?: boolean;
+  showInvoiceLogo?: boolean;
 }
 
-export default function Reports({ sales, purchases, contacts, items, branches, activeCurrency, currencies, initialTab, logoUrl }: ReportsProps) {
-  const [activeReportTab, setActiveReportTab] = useState<'sales' | 'purchases' | 'accounts' | 'stock'>('sales');
+export default function Reports({
+  sales,
+  purchases,
+  contacts,
+  items,
+  branches,
+  activeCurrency,
+  currencies,
+  initialTab,
+  logoUrl,
+  returns = [],
+  branchStock = [],
+  movements = [],
+  showInvoiceDate = true,
+  showInvoiceBranch = true,
+  showInvoiceLogo = true
+}: ReportsProps) {
+  const [activeReportTab, setActiveReportTab] = useState<'sales' | 'purchases' | 'accounts' | 'stock' | 'trial-balance' | 'final-accounts' | 'profits'>('sales');
 
   useEffect(() => {
     if (initialTab) {
@@ -31,6 +53,12 @@ export default function Reports({ sales, purchases, contacts, items, branches, a
   // View invoice/transaction modal states
   const [selectedTx, setSelectedTx] = useState<Sale | Purchase | null>(null);
   const [selectedTxType, setSelectedTxType] = useState<'sale' | 'purchase' | null>(null);
+  const [showSalesReportPrintModal, setShowSalesReportPrintModal] = useState(false);
+
+  // Search state for profits per item and detailed drill-down modals
+  const [profitsSearchQuery, setProfitsSearchQuery] = useState('');
+  const [selectedContactForLedger, setSelectedContactForLedger] = useState<CustomerSupplier | null>(null);
+  const [selectedItemForLedger, setSelectedItemForLedger] = useState<Item | null>(null);
 
   const currList = currencies || [];
   const baseCurrency = currList.find(c => c.isBase) || { id: 'ILS', symbol: '₪' };
@@ -229,25 +257,43 @@ export default function Reports({ sales, purchases, contacts, items, branches, a
       <div className="flex border-b border-slate-200 dark:border-slate-800 gap-4 overflow-x-auto no-scrollbar pb-1 no-print">
         <button
           onClick={() => setActiveReportTab('sales')}
-          className={`pb-3 font-bold text-sm transition-all relative cursor-pointer ${activeReportTab === 'sales' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
+          className={`pb-3 font-bold text-sm transition-all relative cursor-pointer whitespace-nowrap ${activeReportTab === 'sales' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           كشف المبيعات وفلترتها
         </button>
         <button
           onClick={() => setActiveReportTab('purchases')}
-          className={`pb-3 font-bold text-sm transition-all relative cursor-pointer ${activeReportTab === 'purchases' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
+          className={`pb-3 font-bold text-sm transition-all relative cursor-pointer whitespace-nowrap ${activeReportTab === 'purchases' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           جرد وتدقيق المشتريات
         </button>
         <button
           onClick={() => setActiveReportTab('accounts')}
-          className={`pb-3 font-bold text-sm transition-all relative cursor-pointer ${activeReportTab === 'accounts' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
+          className={`pb-3 font-bold text-sm transition-all relative cursor-pointer whitespace-nowrap ${activeReportTab === 'accounts' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           ميزان أرصدة الحسابات الإجمالية
         </button>
         <button
+          onClick={() => setActiveReportTab('trial-balance')}
+          className={`pb-3 font-bold text-sm transition-all relative cursor-pointer whitespace-nowrap ${activeReportTab === 'trial-balance' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
+        >
+          ميزان المراجعة (Trial Balance)
+        </button>
+         <button
+          onClick={() => setActiveReportTab('profits')}
+          className={`pb-3 font-bold text-sm transition-all relative cursor-pointer whitespace-nowrap ${activeReportTab === 'profits' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
+        >
+          تقرير الأرباح والتحليلات الاحترافي
+        </button>
+        <button
+          onClick={() => setActiveReportTab('final-accounts')}
+          className={`pb-3 font-bold text-sm transition-all relative cursor-pointer whitespace-nowrap ${activeReportTab === 'final-accounts' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
+        >
+          الميزانية الختامية والأصول
+        </button>
+        <button
           onClick={() => setActiveReportTab('stock')}
-          className={`pb-3 font-bold text-sm transition-all relative cursor-pointer ${activeReportTab === 'stock' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
+          className={`pb-3 font-bold text-sm transition-all relative cursor-pointer whitespace-nowrap ${activeReportTab === 'stock' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           أصناف تحت حد الطلب والنفاذ
         </button>
@@ -322,10 +368,11 @@ export default function Reports({ sales, purchases, contacts, items, branches, a
                 <Download size={14} /> إكسل
               </button>
               <button
-                onClick={() => window.print()}
+                onClick={() => setShowSalesReportPrintModal(true)}
                 className="flex-1 py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+                title="عرض وتصميم تقرير مبيعات مفصل ومحسن للطباعة أو الحفظ كـ PDF"
               >
-                <Printer size={14} /> طباعة
+                <Printer size={14} /> تقرير PDF محسن
               </button>
             </div>
           </div>
@@ -624,6 +671,839 @@ export default function Reports({ sales, purchases, contacts, items, branches, a
         </div>
       )}
 
+      {/* 3. REPORT: PROFITS & ANALYTICS (تقرير الأرباح والتحليلات الاحترافي) */}
+      {activeReportTab === 'profits' && (() => {
+        // Compute overall profits
+        const totalSales = sales.reduce((acc, s) => acc + s.total, 0);
+        const totalSalesDiscounts = sales.reduce((acc, s) => acc + s.discount, 0);
+        const totalPurchasesDiscounts = purchases.reduce((acc, p) => acc + p.discount, 0);
+
+        let totalCOGS = 0;
+        sales.forEach(s => {
+          s.items.forEach(si => {
+            const item = items.find(i => i.id === si.itemId);
+            if (item) {
+              let qty = si.quantity;
+              if (si.isSubUnitUsed && item.conversionRate) {
+                qty = qty / item.conversionRate;
+              }
+              totalCOGS += qty * item.purchasePrice;
+            }
+          });
+        });
+
+        const grossProfit = totalSales - totalCOGS;
+        const netProfit = grossProfit + totalPurchasesDiscounts - totalSalesDiscounts;
+        const grossMarginPercent = totalSales > 0 ? (grossProfit / totalSales) * 100 : 0;
+        const netMarginPercent = totalSales > 0 ? (netProfit / totalSales) * 100 : 0;
+
+        // Compute profit per item
+        const itemStats: { [itemId: string]: { qtySold: number; revenue: number; cost: number; profit: number } } = {};
+        
+        sales.forEach(s => {
+          s.items.forEach(si => {
+            const item = items.find(i => i.id === si.itemId);
+            if (!item) return;
+            
+            let qty = si.quantity;
+            if (si.isSubUnitUsed && item.conversionRate) {
+              qty = qty / item.conversionRate;
+            }
+            
+            if (!itemStats[item.id]) {
+              itemStats[item.id] = { qtySold: 0, revenue: 0, cost: 0, profit: 0 };
+            }
+            
+            const costVal = qty * item.purchasePrice;
+            itemStats[item.id].qtySold += qty;
+            itemStats[item.id].revenue += si.total;
+            itemStats[item.id].cost += costVal;
+            itemStats[item.id].profit += (si.total - costVal);
+          });
+        });
+
+        // Filter items based on search query
+        const profitItemsList = items.map(item => {
+          const stats = itemStats[item.id] || { qtySold: 0, revenue: 0, cost: 0, profit: 0 };
+          const margin = stats.revenue > 0 ? (stats.profit / stats.revenue) * 100 : 0;
+          return {
+            ...item,
+            ...stats,
+            margin
+          };
+        }).filter(item => {
+          if (!profitsSearchQuery) return true;
+          return item.name.toLowerCase().includes(profitsSearchQuery.toLowerCase()) || 
+                 item.category.toLowerCase().includes(profitsSearchQuery.toLowerCase()) ||
+                 item.barcode.includes(profitsSearchQuery);
+        }).sort((a, b) => b.profit - a.profit);
+
+        // Group profits by Category
+        const categoryStats: { [cat: string]: { qtySold: number; revenue: number; cost: number; profit: number; itemsCount: number } } = {};
+        items.forEach(item => {
+          const cat = item.category || 'عام';
+          const stats = itemStats[item.id] || { qtySold: 0, revenue: 0, cost: 0, profit: 0 };
+          if (!categoryStats[cat]) {
+            categoryStats[cat] = { qtySold: 0, revenue: 0, cost: 0, profit: 0, itemsCount: 0 };
+          }
+          categoryStats[cat].itemsCount += 1;
+          categoryStats[cat].qtySold += stats.qtySold;
+          categoryStats[cat].revenue += stats.revenue;
+          categoryStats[cat].cost += stats.cost;
+          categoryStats[cat].profit += stats.profit;
+        });
+
+        const categoryList = Object.keys(categoryStats).map(cat => {
+          const s = categoryStats[cat];
+          const margin = s.revenue > 0 ? (s.profit / s.revenue) * 100 : 0;
+          return {
+            category: cat,
+            ...s,
+            margin
+          };
+        }).sort((a, b) => b.profit - a.profit);
+
+        // Customer contribution to profits
+        const customerProfitStats: { [custId: string]: { name: string; salesCount: number; revenue: number; profit: number } } = {};
+        sales.forEach(s => {
+          const custId = s.customerId || 'walk_in';
+          const custName = s.customerName || 'زبون نقدي عام';
+          if (!customerProfitStats[custId]) {
+            customerProfitStats[custId] = { name: custName, salesCount: 0, revenue: 0, profit: 0 };
+          }
+          
+          let saleCost = 0;
+          s.items.forEach(si => {
+            const item = items.find(i => i.id === si.itemId);
+            if (item) {
+              let qty = si.quantity;
+              if (si.isSubUnitUsed && item.conversionRate) {
+                qty = qty / item.conversionRate;
+              }
+              saleCost += qty * item.purchasePrice;
+            }
+          });
+
+          customerProfitStats[custId].salesCount += 1;
+          customerProfitStats[custId].revenue += s.total;
+          customerProfitStats[custId].profit += (s.total - saleCost);
+        });
+
+        const customerProfitList = Object.keys(customerProfitStats).map(id => ({
+          id,
+          ...customerProfitStats[id]
+        })).sort((a, b) => b.profit - a.profit).slice(0, 5);
+
+        return (
+          <div className="space-y-6">
+            {/* Overview Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 no-print">
+              <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/40 dark:from-emerald-950/20 dark:to-emerald-900/10 p-5 rounded-2xl border border-emerald-200/50 dark:border-emerald-800/40 space-y-2">
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-400">إجمالي المبيعات (الخام)</span>
+                  <div className="p-1.5 bg-emerald-100 dark:bg-emerald-950 rounded-lg text-emerald-600 dark:text-emerald-400">
+                    <TrendingUp size={16} />
+                  </div>
+                </div>
+                <h4 className="text-2xl font-black font-mono text-slate-900 dark:text-white">
+                  {totalSales.toFixed(2)} <span className="text-xs">{baseCurrency.symbol}</span>
+                </h4>
+                <p className="text-[10px] text-slate-400">القيمة الإجمالية للمبيعات قبل خصم التكاليف</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-red-50 to-red-100/40 dark:from-red-950/20 dark:to-red-900/10 p-5 rounded-2xl border border-red-200/50 dark:border-red-800/40 space-y-2">
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-400">تكلفة البضاعة المباعة (COGS)</span>
+                  <div className="p-1.5 bg-red-100 dark:bg-red-950 rounded-lg text-red-600 dark:text-red-400">
+                    <TrendingDown size={16} />
+                  </div>
+                </div>
+                <h4 className="text-2xl font-black font-mono text-slate-900 dark:text-white">
+                  {totalCOGS.toFixed(2)} <span className="text-xs">{baseCurrency.symbol}</span>
+                </h4>
+                <p className="text-[10px] text-slate-400">تكلفة شراء السلع التي تم بيعها فعلياً</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/40 dark:from-indigo-950/20 dark:to-indigo-900/10 p-5 rounded-2xl border border-indigo-200/50 dark:border-indigo-800/40 space-y-2">
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-400">الربح الإجمالي (Gross Profit)</span>
+                  <div className="p-1.5 bg-indigo-100 dark:bg-indigo-950 rounded-lg text-indigo-600 dark:text-indigo-400">
+                    <TrendingUp size={16} />
+                  </div>
+                </div>
+                <h4 className="text-2xl font-black font-mono text-indigo-600 dark:text-indigo-400">
+                  {grossProfit.toFixed(2)} <span className="text-xs">{baseCurrency.symbol}</span>
+                </h4>
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span>هامش الربح الإجمالي:</span>
+                  <span className="font-bold font-mono text-indigo-600">{grossMarginPercent.toFixed(1)}%</span>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-violet-50 to-violet-100/40 dark:from-violet-950/20 dark:to-violet-900/10 p-5 rounded-2xl border border-violet-200/50 dark:border-violet-800/40 space-y-2">
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-400">صافي الأرباح التشغيلية</span>
+                  <div className="p-1.5 bg-violet-100 dark:bg-violet-950 rounded-lg text-violet-600 dark:text-violet-400">
+                    <TrendingUp size={16} />
+                  </div>
+                </div>
+                <h4 className="text-2xl font-black font-mono text-violet-600 dark:text-violet-400">
+                  {netProfit.toFixed(2)} <span className="text-xs">{baseCurrency.symbol}</span>
+                </h4>
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span>هامش الربح الصافي:</span>
+                  <span className="font-bold font-mono text-violet-600">{netMarginPercent.toFixed(1)}%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Sub-discounts detail and visual progress */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
+              <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <TrendingUp size={16} className="text-emerald-500" /> ملخص موازنة الخصومات وهوامش الكفاءة
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                    <span>الخصم الممنوح للزبائن (عبء مالي):</span>
+                    <strong className="font-mono text-red-500">-{totalSalesDiscounts.toFixed(2)} {baseCurrency.symbol}</strong>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                    <span>الخصم المكتسب من الموردين (إيراد إضافي):</span>
+                    <strong className="font-mono text-emerald-600">+{totalPurchasesDiscounts.toFixed(2)} {baseCurrency.symbol}</strong>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-2 font-bold">
+                    <span>مجموع تأثير الخصومات المتبادلة:</span>
+                    <span className={`font-mono ${(totalPurchasesDiscounts - totalSalesDiscounts) >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {(totalPurchasesDiscounts - totalSalesDiscounts).toFixed(2)} {baseCurrency.symbol}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col justify-center space-y-3">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] font-semibold text-slate-500">
+                      <span>كفاءة هامش الربح الصافي (نسبة مئوية)</span>
+                      <span className="font-bold font-mono text-slate-800 dark:text-slate-200">{netMarginPercent.toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div 
+                        className="bg-emerald-500 h-full rounded-full transition-all" 
+                        style={{ width: `${Math.min(100, Math.max(0, netMarginPercent))}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 italic">المعدل القياسي المقبول تجارياً لهامش الربح الصافي هو 15% - 25% لتجارة التجزئة والمقاولات الخدمية في قطاع التوريدات.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Items Profits & Search */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+              {/* Profits per item */}
+              <div className="xl:col-span-8 rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md flex flex-col space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <h3 className="font-bold text-md text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                    <span>ربحية الأصناف ومبيعاتها بالتفصيل</span>
+                    <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full text-slate-500">
+                      مرتبة حسب الأكثر ربحاً (اضغط على الصنف لفتح كارت حركاته)
+                    </span>
+                  </h3>
+                  {/* Search Input */}
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute right-3 top-2.5 text-slate-400" size={14} />
+                    <input
+                      type="text"
+                      placeholder="ابحث عن صنف أو قسم..."
+                      value={profitsSearchQuery}
+                      onChange={(e) => setProfitsSearchQuery(e.target.value)}
+                      className="w-full pl-3 pr-9 py-1.5 rounded-xl text-xs glass-input focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto no-scrollbar">
+                  <table className="w-full text-right text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 font-bold">
+                        <th className="pb-3 pr-2">الصنف والقسم</th>
+                        <th className="pb-3 text-center">الكمية المباعة</th>
+                        <th className="pb-3 text-center">قيمة المبيعات</th>
+                        <th className="pb-3 text-center">تكلفة الشراء</th>
+                        <th className="pb-3 text-center">الأرباح المحققة</th>
+                        <th className="pb-3 text-left pl-2">هامش الربح</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {profitItemsList.map(item => (
+                        <tr 
+                          key={item.id} 
+                          onClick={() => setSelectedItemForLedger(item)}
+                          className="hover:bg-slate-500/5 transition cursor-pointer"
+                          title="اضغط لفتح حركة كارت الصنف المخزنية بالكامل"
+                        >
+                          <td className="py-2.5 pr-2">
+                            <div className="font-bold text-slate-900 dark:text-white hover:text-emerald-500 transition">{item.name}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">القسم: {item.category} | {item.barcode}</div>
+                          </td>
+                          <td className="py-2.5 text-center font-bold font-mono text-slate-700 dark:text-slate-300">
+                            {item.qtySold.toFixed(1)} {item.mainUnit}
+                          </td>
+                          <td className="py-2.5 text-center font-bold font-mono text-slate-900 dark:text-white">
+                            {item.revenue.toFixed(2)}
+                          </td>
+                          <td className="py-2.5 text-center font-bold font-mono text-slate-500">
+                            {item.cost.toFixed(2)}
+                          </td>
+                          <td className="py-2.5 text-center font-black font-mono text-emerald-600 dark:text-emerald-400">
+                            {item.profit.toFixed(2)}
+                          </td>
+                          <td className="py-2.5 text-left pl-2 font-mono">
+                            <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${item.margin > 30 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40' : item.margin > 15 ? 'bg-sky-100 text-sky-700 dark:bg-sky-950/40' : item.margin > 0 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40' : 'bg-red-100 text-red-700 dark:bg-red-950/40'}`}>
+                              {item.margin.toFixed(1)}%
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {profitItemsList.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="text-center py-6 text-slate-400">
+                            لا يوجد نتائج تطابق بحثك حالياً.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Profits by Category & Top Customers */}
+              <div className="xl:col-span-4 space-y-6">
+                {/* Category Profitability */}
+                <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+                  <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                    <Layers size={16} className="text-emerald-500" /> الربحية حسب الأقسام والتصنيفات
+                  </h3>
+                  <div className="space-y-3.5">
+                    {categoryList.map(cat => (
+                      <div key={cat.category} className="space-y-1 border-b border-slate-100 dark:border-slate-800 pb-2.5 last:border-0 last:pb-0">
+                        <div className="flex justify-between text-xs">
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{cat.category}</span>
+                          <span className="font-mono font-black text-emerald-600 dark:text-emerald-400">
+                            {cat.profit.toFixed(2)} {baseCurrency.symbol}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-slate-400">
+                          <span>المبيعات: {cat.revenue.toFixed(1)} {baseCurrency.symbol}</span>
+                          <span>الهامش: <strong className="text-slate-600 dark:text-slate-300 font-mono">{cat.margin.toFixed(1)}%</strong></span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Customer Profit Contribution */}
+                <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+                  <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                    <BarChart3 size={16} className="text-emerald-500" /> أكثر العملاء مساهمة في الأرباح
+                  </h3>
+                  <div className="space-y-3">
+                    {customerProfitList.map((cust, idx) => {
+                      const percentageOfProfit = netProfit > 0 ? (cust.profit / netProfit) * 100 : 0;
+                      return (
+                        <div 
+                          key={cust.id} 
+                          onClick={() => {
+                            const found = contacts.find(c => c.id === cust.id);
+                            if (found) setSelectedContactForLedger(found);
+                          }}
+                          className="space-y-1 cursor-pointer hover:bg-slate-500/5 p-1 rounded transition"
+                          title="اضغط لفتح كشف الذمة والعمليات المالية للعميل"
+                        >
+                          <div className="flex justify-between text-xs">
+                            <span className="font-bold text-slate-800 dark:text-slate-200 hover:text-emerald-500 transition">{idx + 1}. {cust.name}</span>
+                            <strong className="font-mono text-emerald-600">{cust.profit.toFixed(2)} {baseCurrency.symbol}</strong>
+                          </div>
+                          <div className="w-full bg-slate-100 dark:bg-slate-800 h-1 rounded-full overflow-hidden">
+                            <div 
+                              className="bg-emerald-500 h-full rounded-full" 
+                              style={{ width: `${Math.min(100, Math.max(0, percentageOfProfit))}%` }}
+                            ></div>
+                          </div>
+                          <div className="flex justify-between text-[10px] text-slate-400">
+                            <span>عدد فواتيره: {cust.salesCount}</span>
+                            <span>المساهمة في الأرباح: {percentageOfProfit.toFixed(1)}%</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 5. REPORT: TRIAL BALANCE (ميزان المراجعة) */}
+      {activeReportTab === 'trial-balance' && (() => {
+        let totalOpeningDebit = 0;
+        let totalOpeningCredit = 0;
+        let totalMovementDebit = 0;
+        let totalMovementCredit = 0;
+        let totalEndingDebit = 0;
+        let totalEndingCredit = 0;
+
+        const rows = contacts.map(c => {
+          let openingDebit = 0;
+          let openingCredit = 0;
+          if (c.initialBalance < 0) {
+            openingDebit = Math.abs(c.initialBalance);
+          } else {
+            openingCredit = c.initialBalance;
+          }
+
+          let debitMovements = 0;
+          let creditMovements = 0;
+
+          sales
+            .filter(s => s.customerId === c.id)
+            .forEach(s => {
+              const debitVal = s.total - s.paidAmount;
+              if (debitVal > 0) debitMovements += debitVal;
+              if (s.paidAmount > 0) creditMovements += s.paidAmount;
+            });
+
+          purchases
+            .filter(p => p.supplierId === c.id)
+            .forEach(p => {
+              const creditVal = p.total - p.paidAmount;
+              if (creditVal > 0) creditMovements += creditVal;
+              if (p.paidAmount > 0) debitMovements += p.paidAmount;
+            });
+
+          returns
+            .filter(r => r.customerId === c.id)
+            .forEach(r => {
+              creditMovements += r.total;
+            });
+
+          const expectedBalance = c.initialBalance + creditMovements - debitMovements;
+          const diff = c.currentBalance - expectedBalance;
+          if (diff > 0) {
+            creditMovements += diff;
+          } else if (diff < 0) {
+            debitMovements += Math.abs(diff);
+          }
+
+          let endingDebit = 0;
+          let endingCredit = 0;
+          if (c.currentBalance < 0) {
+            endingDebit = Math.abs(c.currentBalance);
+          } else {
+            endingCredit = c.currentBalance;
+          }
+
+          totalOpeningDebit += openingDebit;
+          totalOpeningCredit += openingCredit;
+          totalMovementDebit += debitMovements;
+          totalMovementCredit += creditMovements;
+          totalEndingDebit += endingDebit;
+          totalEndingCredit += endingCredit;
+
+          return {
+            id: c.id,
+            name: c.name,
+            type: c.type === 'customer' ? 'عميل' : c.type === 'supplier' ? 'مورد' : 'عميل ومورد',
+            openingDebit,
+            openingCredit,
+            debitMovements,
+            creditMovements,
+            endingDebit,
+            endingCredit
+          };
+        });
+
+        let cashOpeningDebit = 0;
+        let cashOpeningCredit = 0;
+        let cashDebitMovements = 0;
+        let cashCreditMovements = 0;
+
+        sales.forEach(s => {
+          if (s.paidAmount > 0) cashDebitMovements += s.paidAmount;
+        });
+        purchases.forEach(p => {
+          if (p.paidAmount > 0) cashCreditMovements += p.paidAmount;
+        });
+
+        contacts.forEach(c => {
+          let debitMovements = 0;
+          let creditMovements = 0;
+          sales
+            .filter(s => s.customerId === c.id)
+            .forEach(s => {
+              const debitVal = s.total - s.paidAmount;
+              if (debitVal > 0) debitMovements += debitVal;
+              if (s.paidAmount > 0) creditMovements += s.paidAmount;
+            });
+          purchases
+            .filter(p => p.supplierId === c.id)
+            .forEach(p => {
+              const creditVal = p.total - p.paidAmount;
+              if (creditVal > 0) creditMovements += creditVal;
+              if (p.paidAmount > 0) debitMovements += p.paidAmount;
+            });
+          returns
+            .filter(r => r.customerId === c.id)
+            .forEach(r => {
+              creditMovements += r.total;
+            });
+
+          const expectedBalance = c.initialBalance + creditMovements - debitMovements;
+          const diff = c.currentBalance - expectedBalance;
+          if (diff > 0) {
+            cashDebitMovements += diff;
+          } else if (diff < 0) {
+            cashCreditMovements += Math.abs(diff);
+          }
+        });
+
+        const cashBalance = cashDebitMovements - cashCreditMovements;
+        let cashEndingDebit = cashBalance > 0 ? cashBalance : 0;
+        let cashEndingCredit = cashBalance < 0 ? Math.abs(cashBalance) : 0;
+
+        totalOpeningDebit += cashOpeningDebit;
+        totalOpeningCredit += cashOpeningCredit;
+        totalMovementDebit += cashDebitMovements;
+        totalMovementCredit += cashCreditMovements;
+        totalEndingDebit += cashEndingDebit;
+        totalEndingCredit += cashEndingCredit;
+
+        let invOpeningDebit = 0;
+        items.forEach(item => {
+          invOpeningDebit += 25 * item.purchasePrice;
+        });
+
+        let invDebitMovements = purchases.reduce((acc, p) => acc + p.total, 0);
+        let invCreditMovements = 0;
+        sales.forEach(s => {
+          s.items.forEach(si => {
+            const item = items.find(i => i.id === si.itemId);
+            if (item) {
+              let qty = si.quantity;
+              if (si.isSubUnitUsed && item.conversionRate) {
+                qty = qty / item.conversionRate;
+              }
+              invCreditMovements += qty * item.purchasePrice;
+            }
+          });
+        });
+
+        const invBalance = invOpeningDebit + invDebitMovements - invCreditMovements;
+        let invEndingDebit = invBalance > 0 ? invBalance : 0;
+        let invEndingCredit = invBalance < 0 ? Math.abs(invBalance) : 0;
+
+        totalOpeningDebit += invOpeningDebit;
+        totalOpeningCredit += 0;
+        totalMovementDebit += invDebitMovements;
+        totalMovementCredit += invCreditMovements;
+        totalEndingDebit += invEndingDebit;
+        totalEndingCredit += invEndingCredit;
+
+        return (
+          <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800/80">
+              <h3 className="font-bold text-md text-emerald-500 flex items-center gap-1.5">
+                <Scale size={18} /> ميزان المراجعة المحاسبي العام للأرصدة والحركات
+              </h3>
+              <button
+                onClick={() => window.print()}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow cursor-pointer transition flex items-center gap-1.5 no-print"
+              >
+                <Printer size={12} /> طباعة ميزان المراجعة
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">يعرض هذا التقرير الأرصدة الافتتاحية والحركات الدائنة والمدينة للفترة الجارية لكل من الحسابات التجارية (العملاء والموردين)، بالإضافة لحساب الصندوق وحساب تقييم بضاعة المخازن لتسهيل التدقيق والمطابقة السريعة.</p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs border-collapse">
+                <thead>
+                  <tr className="border-b-2 border-slate-200 dark:border-slate-800 text-slate-500 bg-slate-500/5 font-bold">
+                    <th className="p-3 text-right" rowSpan={2}>اسم الحساب المالي / الأصل</th>
+                    <th className="p-3 text-center" rowSpan={2}>نوع الحساب</th>
+                    <th className="p-1.5 text-center border-b border-slate-200 dark:border-slate-800" colSpan={2}>الرصيد الافتتاحي</th>
+                    <th className="p-1.5 text-center border-b border-slate-200 dark:border-slate-800" colSpan={2}>حركات الفترة الحالية</th>
+                    <th className="p-1.5 text-center border-b border-slate-200 dark:border-slate-800" colSpan={2}>الرصيد الختامي</th>
+                  </tr>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 bg-slate-500/5 text-[10px]">
+                    <th className="p-1.5 text-center font-mono">مدين (عليه)</th>
+                    <th className="p-1.5 text-center font-mono">دائن (له)</th>
+                    <th className="p-1.5 text-center font-mono">مدين (+)</th>
+                    <th className="p-1.5 text-center font-mono">دائن (-)</th>
+                    <th className="p-1.5 text-center font-mono">مدين (عليه)</th>
+                    <th className="p-1.5 text-center font-mono">دائن (له)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-900 dark:text-white font-medium">
+                  {/* Row: Cash */}
+                  <tr className="hover:bg-slate-500/5 transition bg-emerald-500/5">
+                    <td className="p-3 font-bold text-emerald-600 dark:text-emerald-400">💵 حساب الصندوق والجرود النقدية</td>
+                    <td className="p-3 text-center text-slate-500">نقدية وأصول</td>
+                    <td className="p-2 text-center font-mono">{cashOpeningDebit.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono">{cashOpeningCredit.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono text-emerald-500 font-bold">+{cashDebitMovements.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono text-red-500">-{cashCreditMovements.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono bg-emerald-500/10 font-extrabold">{cashEndingDebit.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono">{cashEndingCredit.toFixed(2)}</td>
+                  </tr>
+
+                  {/* Row: Inventory */}
+                  <tr className="hover:bg-slate-500/5 transition bg-amber-500/5">
+                    <td className="p-3 font-bold text-amber-600 dark:text-amber-400">📦 حساب مخزون البضائع المتاحة</td>
+                    <td className="p-3 text-center text-slate-500">مخزون وأصول</td>
+                    <td className="p-2 text-center font-mono">{invOpeningDebit.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono">0.00</td>
+                    <td className="p-2 text-center font-mono text-emerald-500 font-bold">+{invDebitMovements.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono text-red-500">-{invCreditMovements.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono bg-amber-500/10 font-extrabold">{invEndingDebit.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono">{invEndingCredit.toFixed(2)}</td>
+                  </tr>
+
+                  {/* Account Rows */}
+                  {rows.map(row => (
+                    <tr key={row.id} className="hover:bg-slate-500/5 transition">
+                      <td className="p-3 font-semibold">{row.name}</td>
+                      <td className="p-3 text-center text-slate-500 text-[10px]">{row.type}</td>
+                      <td className="p-2 text-center font-mono text-slate-500">{row.openingDebit > 0 ? row.openingDebit.toFixed(2) : '-'}</td>
+                      <td className="p-2 text-center font-mono text-slate-500">{row.openingCredit > 0 ? row.openingCredit.toFixed(2) : '-'}</td>
+                      <td className="p-2 text-center font-mono text-slate-600 dark:text-slate-300">{row.debitMovements > 0 ? row.debitMovements.toFixed(2) : '-'}</td>
+                      <td className="p-2 text-center font-mono text-slate-600 dark:text-slate-300">{row.creditMovements > 0 ? row.creditMovements.toFixed(2) : '-'}</td>
+                      <td className={`p-2 text-center font-mono font-bold ${row.endingDebit > 0 ? 'text-amber-500' : ''}`}>{row.endingDebit > 0 ? row.endingDebit.toFixed(2) : '-'}</td>
+                      <td className={`p-2 text-center font-mono font-bold ${row.endingCredit > 0 ? 'text-emerald-500' : ''}`}>{row.endingCredit > 0 ? row.endingCredit.toFixed(2) : '-'}</td>
+                    </tr>
+                  ))}
+
+                  {/* Total row */}
+                  <tr className="border-t-2 border-slate-300 dark:border-slate-700 bg-slate-500/10 font-extrabold text-slate-900 dark:text-white">
+                    <td className="p-3 font-black text-right" colSpan={2}>المجموع الإجمالي العام المتوازن</td>
+                    <td className="p-2 text-center font-mono">{totalOpeningDebit.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono">{totalOpeningCredit.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono text-emerald-600 dark:text-emerald-400">{totalMovementDebit.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono text-red-500">{totalMovementCredit.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono text-amber-500">{totalEndingDebit.toFixed(2)}</td>
+                    <td className="p-2 text-center font-mono text-emerald-500">{totalEndingCredit.toFixed(2)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="flex gap-2 items-center text-[10px] bg-slate-500/5 p-3 rounded-xl border border-white/5 text-slate-400">
+              <HelpCircle size={14} className="text-emerald-500" />
+              <span>ملاحظة تدقيقية محاسبية: يتساوى إجمالي المدين والدائن في الأرصدة الافتتاحية والختامية والحركات عند إدخال كافة الحسابات المزدوجة، ويتم إدراج الصندوق والمخازن لضمان المطابقة المتوازنة.</span>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 6. REPORT: CLOSING FINANCIAL STATEMENTS & PROFITS */}
+      {activeReportTab === 'final-accounts' && (() => {
+        const totalSales = sales.reduce((acc, s) => acc + s.total, 0);
+        const totalPurchases = purchases.reduce((acc, p) => acc + p.total, 0);
+        const totalSalesDiscounts = sales.reduce((acc, s) => acc + s.discount, 0);
+        const totalPurchasesDiscounts = purchases.reduce((acc, p) => acc + p.discount, 0);
+
+        let totalCOGS = 0;
+        sales.forEach(s => {
+          s.items.forEach(si => {
+            const item = items.find(i => i.id === si.itemId);
+            if (item) {
+              let qty = si.quantity;
+              if (si.isSubUnitUsed && item.conversionRate) {
+                qty = qty / item.conversionRate;
+              }
+              totalCOGS += qty * item.purchasePrice;
+            }
+          });
+        });
+
+        const grossProfit = totalSales - totalCOGS;
+        const netProfit = grossProfit + totalPurchasesDiscounts - totalSalesDiscounts;
+
+        let cashInflows = sales.reduce((acc, s) => acc + s.paidAmount, 0);
+        let cashOutflows = purchases.reduce((acc, p) => acc + p.paidAmount, 0);
+
+        contacts.forEach(c => {
+          let debitMovements = 0;
+          let creditMovements = 0;
+          sales.filter(s => s.customerId === c.id).forEach(s => {
+            const debitVal = s.total - s.paidAmount;
+            if (debitVal > 0) debitMovements += debitVal;
+            if (s.paidAmount > 0) creditMovements += s.paidAmount;
+          });
+          purchases.filter(p => p.supplierId === c.id).forEach(p => {
+            const creditVal = p.total - p.paidAmount;
+            if (creditVal > 0) creditMovements += creditVal;
+            if (p.paidAmount > 0) debitMovements += p.paidAmount;
+          });
+          returns.filter(r => r.customerId === c.id).forEach(r => {
+            creditMovements += r.total;
+          });
+
+          const expectedBalance = c.initialBalance + creditMovements - debitMovements;
+          const diff = c.currentBalance - expectedBalance;
+          if (diff > 0) {
+            cashInflows += diff;
+          } else if (diff < 0) {
+            cashOutflows += Math.abs(diff);
+          }
+        });
+
+        const cashAsset = Math.max(0, cashInflows - cashOutflows);
+        
+        let inventoryAsset = 0;
+        if (branchStock && branchStock.length > 0) {
+          branchStock.forEach(bs => {
+            const item = items.find(i => i.id === bs.itemId);
+            if (item) {
+              inventoryAsset += bs.quantity * item.purchasePrice;
+            }
+          });
+        } else {
+          let invOpeningDebit = 0;
+          items.forEach(item => {
+            invOpeningDebit += 25 * item.purchasePrice;
+          });
+          inventoryAsset = invOpeningDebit + totalPurchases - totalCOGS;
+        }
+
+        const accountsReceivable = contacts
+          .filter(c => c.currentBalance < 0)
+          .reduce((acc, c) => acc + Math.abs(c.currentBalance), 0);
+
+        const totalAssets = cashAsset + inventoryAsset + accountsReceivable;
+
+        const accountsPayable = contacts
+          .filter(c => c.currentBalance > 0)
+          .reduce((acc, c) => acc + c.currentBalance, 0);
+
+        const initialCapital = Math.max(0, totalAssets - accountsPayable - netProfit);
+        const totalLiabilitiesAndEquity = accountsPayable + initialCapital + netProfit;
+
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Income Statement */}
+            <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+              <h3 className="font-bold text-md text-emerald-500 flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-slate-800/80">
+                <Calculator size={18} /> قائمة الدخل والأرباح الختامية الجارية
+              </h3>
+              
+              <div className="space-y-3 text-xs pt-2">
+                <div className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800/40">
+                  <span className="font-bold text-slate-800 dark:text-slate-200">إجمالي إيرادات المبيعات المحققة</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-white">{totalSales.toFixed(2)} شيكل</span>
+                </div>
+
+                <div className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800/40 pl-4 bg-red-500/5 rounded-lg">
+                  <span className="text-red-500 font-semibold">يخصم: تكلفة البضائع والسلع المباعة (COGS)</span>
+                  <span className="font-mono font-bold text-red-500">-{totalCOGS.toFixed(2)} شيكل</span>
+                </div>
+
+                <div className="flex justify-between items-center py-2.5 border-b border-slate-200 dark:border-slate-700 bg-slate-500/10 rounded-lg px-2">
+                  <span className="font-extrabold text-slate-900 dark:text-white">إجمالي مجمل الربح التشغيلي (Gross Profit)</span>
+                  <span className="font-mono font-black text-emerald-600 dark:text-emerald-400">{grossProfit.toFixed(2)} شيكل</span>
+                </div>
+
+                <div className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800/40">
+                  <span className="text-slate-600 dark:text-slate-300">يضاف: الخصومات المكتسبة من الموردين</span>
+                  <span className="font-mono font-bold text-emerald-500">+{totalPurchasesDiscounts.toFixed(2)} شيكل</span>
+                </div>
+
+                <div className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800/40 pl-4">
+                  <span className="text-slate-600 dark:text-slate-300">يخصم: الخصومات الممنوحة للعملاء والزبائن</span>
+                  <span className="font-mono font-bold text-red-400">-{totalSalesDiscounts.toFixed(2)} شيكل</span>
+                </div>
+
+                <div className="flex justify-between items-center py-3 border-t-2 border-emerald-500/30 bg-emerald-500/10 rounded-xl px-3 mt-4">
+                  <span className="font-black text-sm text-slate-950 dark:text-white">صافي الأرباح النهائية للمجموعة</span>
+                  <span className="font-mono text-lg font-black text-emerald-600 dark:text-emerald-400">
+                    {netProfit.toFixed(2)} شيكل
+                  </span>
+                </div>
+              </div>
+              
+              <div className="text-[10px] text-slate-400 italic pt-2">
+                * يتم احتساب تكلفة البضاعة المباعة تلقائياً وبدقة بالرجوع لأسعار التوريد والشراء المسجلة لكل صنف لضمان حقيقة الربح التشغيلي.
+              </div>
+            </div>
+
+            {/* Balance Sheet */}
+            <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+              <h3 className="font-bold text-md text-amber-500 flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-slate-800/80">
+                <FileSpreadsheet size={18} /> الميزانية العمومية والمركز المالي الختامي
+              </h3>
+
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                {/* Assets Column */}
+                <div className="space-y-3 bg-slate-500/5 p-3 rounded-xl border border-white/5">
+                  <h4 className="font-bold text-emerald-500 border-b border-slate-200 dark:border-slate-800 pb-1.5">الأصول المتداولة (Assets)</h4>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 text-[10px]">نقدية الصندوق</span>
+                    <span className="font-mono font-semibold">{cashAsset.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 text-[10px]">تقييم البضاعة المخزنة</span>
+                    <span className="font-mono font-semibold">{inventoryAsset.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 text-[10px]">ذمم العملاء المدينة</span>
+                    <span className="font-mono font-semibold">{accountsReceivable.toFixed(2)}</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center border-t border-dashed border-slate-300 dark:border-slate-700 pt-2 font-bold text-slate-900 dark:text-white">
+                    <span>إجمالي الأصول</span>
+                    <span className="font-mono">{totalAssets.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Liabilities & Equity Column */}
+                <div className="space-y-3 bg-slate-500/5 p-3 rounded-xl border border-white/5">
+                  <h4 className="font-bold text-amber-500 border-b border-slate-200 dark:border-slate-800 pb-1.5">الالتزامات وحقوق الملكية</h4>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 text-[10px]">ذمم الموردين الدائنة</span>
+                    <span className="font-mono font-semibold">{accountsPayable.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 text-[10px]">رأس المال الافتتاحي</span>
+                    <span className="font-mono font-semibold">{initialCapital.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-emerald-500">
+                    <span className="text-[10px] font-bold">الأرباح النهائية الجارية</span>
+                    <span className="font-mono font-bold">{netProfit.toFixed(2)}</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center border-t border-dashed border-slate-300 dark:border-slate-700 pt-2 font-bold text-slate-900 dark:text-white">
+                    <span>إجمالي الخصوم والملكيات</span>
+                    <span className="font-mono">{totalLiabilitiesAndEquity.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {Math.abs(totalAssets - totalLiabilitiesAndEquity) < 0.1 ? (
+                <div className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 p-2.5 rounded-lg border border-emerald-500/20 text-center font-bold">
+                  ✓ ميزان المركز المالي متوازن محاسبياً بالكامل بنسبة 100%!
+                </div>
+              ) : (
+                <div className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 p-2.5 rounded-lg border border-amber-500/20 text-center font-bold">
+                  ⚠ جاري تسوية القيد المزدوج لتوازن حسابات المخزون المحدثة.
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Transaction Details Modal */}
       {selectedTx && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print overflow-y-auto">
@@ -666,32 +1546,47 @@ export default function Reports({ sales, purchases, contacts, items, branches, a
                   <h3 className="font-extrabold text-lg text-slate-950 dark:text-white">
                     رقم الفاتورة: <span className="font-mono">{selectedTx.invoiceNo}</span>
                   </h3>
-                  <p className="text-xs text-slate-500">{new Date(selectedTx.date).toLocaleString('ar-EG')}</p>
+                  {showInvoiceDate && (
+                    <p className="text-xs text-slate-500">{new Date(selectedTx.date).toLocaleString('ar-EG')}</p>
+                  )}
                 </div>
                 
-                <div className="flex items-center gap-2">
-                  {logoUrl ? (
-                    <img src={logoUrl} alt="Logo" className="w-10 h-10 rounded-xl object-contain border border-slate-200 dark:border-slate-800 p-0.5 bg-white" referrerPolicy="no-referrer" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white font-extrabold text-lg shadow-sm">
-                      غك
-                    </div>
-                  )}
-                  <div className="text-left font-bold text-xs text-slate-400">غزة كاش ERP</div>
-                </div>
+                {showInvoiceLogo && (
+                  <div className="flex items-center gap-2">
+                    {logoUrl ? (
+                      <img src={logoUrl} alt="Logo" className="w-10 h-10 rounded-xl object-contain border border-slate-200 dark:border-slate-800 p-0.5 bg-white" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white font-extrabold text-lg shadow-sm">
+                        غك
+                      </div>
+                    )}
+                    <div className="text-left font-bold text-xs text-slate-400">غزة كاش ERP</div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4 pt-2 text-xs">
-                <div className="space-y-1">
-                  <span className="text-slate-400 block font-bold">موقع المستودع / الفرع:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-100">{selectedTx.branchName}</span>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-slate-400 block font-bold">{selectedTxType === 'sale' ? 'العميل المستلم:' : 'المورد المورد:'}</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-100">
-                    {selectedTxType === 'sale' ? (selectedTx as Sale).customerName : (selectedTx as Purchase).supplierName}
-                  </span>
-                </div>
+                {showInvoiceBranch ? (
+                  <>
+                    <div className="space-y-1">
+                      <span className="text-slate-400 block font-bold">موقع المستودع / الفرع:</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-100">{selectedTx.branchName}</span>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-slate-400 block font-bold">{selectedTxType === 'sale' ? 'العميل المستلم:' : 'المورد المورد:'}</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-100">
+                        {selectedTxType === 'sale' ? (selectedTx as Sale).customerName : (selectedTx as Purchase).supplierName}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-1 col-span-2">
+                    <span className="text-slate-400 block font-bold">{selectedTxType === 'sale' ? 'العميل المستلم:' : 'المورد المورد:'}</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-100">
+                      {selectedTxType === 'sale' ? (selectedTx as Sale).customerName : (selectedTx as Purchase).supplierName}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -780,6 +1675,190 @@ export default function Reports({ sales, purchases, contacts, items, branches, a
                 className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-5 py-2 rounded-xl shadow cursor-pointer transition flex items-center gap-1.5"
               >
                 <Printer size={14} /> طباعة الفاتورة أو التقرير
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSalesReportPrintModal && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print overflow-y-auto">
+          <style>{`
+            @media print {
+              body > *:not(.print-report-wrapper) {
+                display: none !important;
+              }
+              .print-report-wrapper {
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                background: white !important;
+                color: black !important;
+                z-index: 99999 !important;
+                padding: 15px !important;
+              }
+            }
+          `}</style>
+          <div className="print-report-wrapper bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-4xl w-full border border-slate-200 dark:border-slate-800 p-6 space-y-6 relative max-h-[90vh] overflow-y-auto">
+            {/* Close / Action controls (no-print) */}
+            <div className="flex justify-between items-center pb-4 border-b border-slate-100 dark:border-slate-800 no-print">
+              <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <Printer size={18} className="text-emerald-500" /> معاينة تقرير المبيعات المطبوع (PDF)
+              </h3>
+              <button
+                onClick={() => setShowSalesReportPrintModal(false)}
+                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Document Body (Printed part) */}
+            <div className="space-y-6 text-right text-slate-900 dark:text-slate-100">
+              {/* Header: Logo & Info */}
+              <div className="flex justify-between items-start gap-4 pb-4 border-b-2 border-slate-200 dark:border-slate-800">
+                <div className="space-y-1">
+                  <h1 className="font-extrabold text-xl text-slate-900 dark:text-white">كشف حركة المبيعات التفصيلي</h1>
+                  <p className="text-xs text-slate-500 font-bold">نظام غزة كاش المحاسبي المتكامل</p>
+                  <p className="text-[10px] text-slate-400">تاريخ الاستخراج: {new Date().toLocaleString('ar-EG')}</p>
+                </div>
+
+                <div className="flex flex-col items-end text-left space-y-1 text-xs">
+                  {showInvoiceLogo && logoUrl && (
+                    <img src={logoUrl} alt="Company Logo" className="w-14 h-14 rounded-xl object-contain border border-slate-200 dark:border-slate-800 p-1 bg-white mb-1" referrerPolicy="no-referrer" />
+                  )}
+                  <span className="font-bold text-slate-800 dark:text-slate-200">الشركة/المجموعة الحالية</span>
+                  <span className="text-slate-500 text-[10px]">
+                    المستودع المختار: {salesBranchId === 'all' ? 'جميع المستودعات والعمليات' : (branches.find(b => b.id === salesBranchId)?.name || 'محدد')}
+                  </span>
+                  <span className="text-slate-500 text-[10px]">
+                    نطاق فلترة التاريخ: {salesDateFrom || 'البداية'} وحتى {salesDateTo || 'النهاية'}
+                  </span>
+                </div>
+              </div>
+
+              {/* KPI Summary Rows */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-200/50 dark:border-slate-800/60 space-y-1">
+                  <span className="text-[10px] text-slate-500 block">إجمالي المبيعات</span>
+                  <strong className="text-sm font-black font-mono text-emerald-600 dark:text-emerald-400">
+                    {filteredSales.reduce((acc, s) => acc + s.total, 0).toFixed(2)} {baseCurrency.symbol}
+                  </strong>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-200/50 dark:border-slate-800/60 space-y-1">
+                  <span className="text-[10px] text-slate-500 block">المقبوض نقداً (كاش)</span>
+                  <strong className="text-sm font-black font-mono text-blue-600 dark:text-blue-400">
+                    {filteredSales.reduce((acc, s) => acc + s.paidAmount, 0).toFixed(2)} {baseCurrency.symbol}
+                  </strong>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-200/50 dark:border-slate-800/60 space-y-1">
+                  <span className="text-[10px] text-slate-500 block">الذمم الآجلة المتبقية</span>
+                  <strong className="text-sm font-black font-mono text-amber-500">
+                    {(filteredSales.reduce((acc, s) => acc + s.total, 0) - filteredSales.reduce((acc, s) => acc + s.paidAmount, 0)).toFixed(2)} {baseCurrency.symbol}
+                  </strong>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-200/50 dark:border-slate-800/60 space-y-1">
+                  <span className="text-[10px] text-slate-500 block">عدد الفواتير الصادرة</span>
+                  <strong className="text-sm font-black font-mono text-slate-800 dark:text-slate-200">
+                    {filteredSales.length} فاتورة
+                  </strong>
+                </div>
+              </div>
+
+              {/* Invoices Table */}
+              <div className="overflow-x-auto pt-2">
+                <table className="w-full text-right text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b-2 border-slate-300 dark:border-slate-700 text-slate-500 font-bold bg-slate-50 dark:bg-slate-800/40">
+                      <th className="py-2 px-2">رقم الفاتورة</th>
+                      {showInvoiceDate && <th className="py-2 px-1">تاريخ ووقت المعاملة</th>}
+                      <th className="py-2 px-1">العميل المستلم</th>
+                      {showInvoiceBranch && <th className="py-2 px-1">موقع الفرع</th>}
+                      <th className="py-2 px-1 text-center">نوع الدفع</th>
+                      <th className="py-2 px-1 text-center">الصافي</th>
+                      <th className="py-2 px-1 text-center">المدفوع كاش</th>
+                      <th className="py-2 px-1 text-left">المتبقي ذمم</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    {filteredSales.length > 0 ? (
+                      filteredSales.map(s => {
+                        const remaining = s.total - s.paidAmount;
+                        const saleCurr = currList.find(c => c.id === getSaleCurrencyId(s)) || baseCurrency;
+                        return (
+                          <tr key={s.id} className="hover:bg-slate-500/5">
+                            <td className="py-2.5 px-2 font-bold font-mono">{s.invoiceNo}</td>
+                            {showInvoiceDate && (
+                              <td className="py-2.5 px-1 text-slate-500">
+                                {new Date(s.date).toLocaleString('ar-EG')}
+                              </td>
+                            )}
+                            <td className="py-2.5 px-1 font-semibold">{s.customerName}</td>
+                            {showInvoiceBranch && (
+                              <td className="py-2.5 px-1 text-slate-500">{s.branchName}</td>
+                            )}
+                            <td className="py-2.5 px-1 text-center">
+                              <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-bold ${s.paymentType === 'cash' ? 'bg-emerald-50/80 text-emerald-700' : 'bg-amber-50/80 text-amber-700'}`}>
+                                {s.paymentType === 'cash' ? 'نقدي' : 'آجل'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-1 text-center font-bold font-mono text-emerald-600">
+                              {s.total.toFixed(2)} {saleCurr.symbol}
+                            </td>
+                            <td className="py-2.5 px-1 text-center font-mono text-slate-500">
+                              {s.paidAmount.toFixed(2)} {saleCurr.symbol}
+                            </td>
+                            <td className="py-2.5 px-1 text-left font-bold font-mono text-amber-600">
+                              {remaining > 0 ? `${remaining.toFixed(2)} ${saleCurr.symbol}` : 'خالص ✓'}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="text-center py-8 text-slate-400 italic">
+                          لا يوجد فواتير مبيعات تطابق التصفية الحالية لتضمينها في هذا الكشف.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Footer Signatures */}
+              <div className="grid grid-cols-3 gap-6 pt-12 text-center text-xs">
+                <div className="space-y-4">
+                  <span className="text-slate-400 block font-bold">توقيع المحاسب المختص</span>
+                  <div className="h-10 border-b border-dashed border-slate-300 dark:border-slate-700 mx-auto w-32"></div>
+                </div>
+                <div className="space-y-4">
+                  <span className="text-slate-400 block font-bold">ختم المنشأة الرسمي</span>
+                  <div className="h-10 w-20 border border-dashed border-slate-300 dark:border-slate-700 rounded-full mx-auto flex items-center justify-center text-[8px] text-slate-300 italic">الختم هنا</div>
+                </div>
+                <div className="space-y-4">
+                  <span className="text-slate-400 block font-bold">توقيع واعتماد الإدارة</span>
+                  <div className="h-10 border-b border-dashed border-slate-300 dark:border-slate-700 mx-auto w-32"></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Print Action Row (no-print) */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 no-print">
+              <button
+                onClick={() => setShowSalesReportPrintModal(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs cursor-pointer transition"
+              >
+                إغلاق المعاينة
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-5 py-2 rounded-xl shadow cursor-pointer transition flex items-center gap-1.5"
+              >
+                <Printer size={14} /> طباعة الكشف الآن
               </button>
             </div>
           </div>

@@ -23,6 +23,9 @@ export interface ShopSettings {
   logoColor: string;
   logoUrl?: string;
   themeColor?: string; // App primary theme color selection (e.g. 'emerald', 'blue', 'indigo', 'purple', 'amber', 'rose')
+  showInvoiceDate?: boolean;
+  showInvoiceBranch?: boolean;
+  showInvoiceLogo?: boolean;
 }
 
 export interface Group {
@@ -205,5 +208,16 @@ export interface AuditLogEntry {
   operator: string;    // user role or active operator
   details: string;     // textual details of the operation
   severity: 'info' | 'warning' | 'critical';
+}
+
+export interface Appointment {
+  id: string;
+  customerId: string;
+  customerName: string;
+  date: string; // "YYYY-MM-DD"
+  time: string; // "HH:MM"
+  notes: string;
+  type: 'delivery' | 'payment' | 'visit' | 'other';
+  status: 'pending' | 'completed' | 'cancelled';
 }
 

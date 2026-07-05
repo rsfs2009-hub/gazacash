@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingCart, Search, User, CreditCard, Ticket, Plus, Minus, Trash2, Printer, Keyboard, AlertCircle } from 'lucide-react';
-import { Item, CustomerSupplier, Sale, TransactionItem, Branch, Currency } from '../types';
+import { ShoppingCart, Search, User, CreditCard, Ticket, Plus, Minus, Trash2, Printer, Keyboard, AlertCircle, X, Calendar, Clock, Sparkles, UserPlus, Layers } from 'lucide-react';
+import { Item, CustomerSupplier, Sale, TransactionItem, Branch, Currency, Appointment } from '../types';
 
 interface POSProps {
   items: Item[];
@@ -17,9 +17,27 @@ interface POSProps {
   shopName: string;
   activeCurrency?: Currency;
   currencies?: Currency[];
+  onAddItem?: (item: Omit<Item, 'id'>, initialQty?: number, branchId?: string) => void;
+  onAddContact?: (contact: Omit<CustomerSupplier, 'id' | 'currentBalance'>) => void;
+  onAddAppointment?: (appointment: Omit<Appointment, 'id' | 'status'>) => void;
+  appointments?: Appointment[];
 }
 
-export default function POS({ items, contacts, branches, activeBranchId, onSaveSale, onPrintInvoice, shopName, activeCurrency, currencies }: POSProps) {
+export default function POS({ 
+  items, 
+  contacts, 
+  branches, 
+  activeBranchId, 
+  onSaveSale, 
+  onPrintInvoice, 
+  shopName, 
+  activeCurrency, 
+  currencies,
+  onAddItem,
+  onAddContact,
+  onAddAppointment,
+  appointments = []
+}: POSProps) {
   const currency = activeCurrency || { id: 'ILS', name: 'شيكل', symbol: '₪', exchangeRate: 1, isBase: true };
 
   // POS States
@@ -37,6 +55,153 @@ export default function POS({ items, contacts, branches, activeBranchId, onSaveS
   const [paidAmount, setPaidAmount] = useState<number>(0);
   const [notes, setNotes] = useState('');
   const [activeBranch, setActiveBranch] = useState(activeBranchId || 'branch_main');
+
+  // Popup Modals toggle states
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [showAddAppointmentModal, setShowAddAppointmentModal] = useState(false);
+
+  // Fast Add Item form states
+  const [itemName, setItemName] = useState('');
+  const [itemBarcode, setItemBarcode] = useState('');
+  const [itemCategory, setItemCategory] = useState('');
+  const [itemPurchasePrice, setItemPurchasePrice] = useState<number | ''>('');
+  const [itemSalePrice, setItemSalePrice] = useState<number | ''>('');
+  const [itemMainUnit, setItemMainUnit] = useState('شوال');
+  const [itemHasSubUnit, setItemHasSubUnit] = useState(false);
+  const [itemSubUnitName, setItemSubUnitName] = useState('كيلو');
+  const [itemConversionRate, setItemConversionRate] = useState<number | ''>(10);
+  const [itemSubUnitSalePrice, setItemSubUnitSalePrice] = useState<number | ''>('');
+  const [itemInitialStock, setItemInitialStock] = useState<number | ''>(10);
+  const [itemMinStock, setItemMinStock] = useState<number | ''>(5);
+
+  // Fast Add Customer form states
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
+  const [customerInitialBalance, setCustomerInitialBalance] = useState<number | ''>(0);
+
+  // Fast Add Appointment form states
+  const [appCustomerId, setAppCustomerId] = useState('');
+  const [appCustomerName, setAppCustomerName] = useState('');
+  const [appDate, setAppDate] = useState(new Date().toISOString().split('T')[0]);
+  const [appTime, setAppTime] = useState('10:00');
+  const [appNotes, setAppNotes] = useState('');
+  const [appType, setAppType] = useState<'delivery' | 'payment' | 'visit' | 'other'>('delivery');
+
+  // Submit Fast Add Item
+  const handleFastAddItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!itemName) {
+      alert('يرجى إدخال اسم الصنف');
+      return;
+    }
+    const finalBarcode = itemBarcode.trim() || `625${Math.floor(1000000 + Math.random() * 9000000)}`;
+    const finalCategory = itemCategory.trim() || 'عام';
+    const purchase = +(itemPurchasePrice || 0);
+    const sale = +(itemSalePrice || 0);
+    const subSale = itemHasSubUnit ? +(itemSubUnitSalePrice || (sale / +(itemConversionRate || 1))) : undefined;
+    
+    if (onAddItem) {
+      onAddItem({
+        barcode: finalBarcode,
+        name: itemName,
+        category: finalCategory,
+        mainUnit: itemMainUnit,
+        hasSubUnit: itemHasSubUnit,
+        subUnitName: itemHasSubUnit ? itemSubUnitName : undefined,
+        conversionRate: itemHasSubUnit ? +(itemConversionRate || 1) : undefined,
+        purchasePrice: purchase,
+        salePrice: sale,
+        subUnitSalePrice: subSale,
+        minStockAlert: +(itemMinStock || 5)
+      }, +(itemInitialStock || 0), activeBranch);
+
+      alert(`تم إضافة الصنف الجديد "${itemName}" بنجاح وتغذيته للمستودع!`);
+      // Reset Item form
+      setItemName('');
+      setItemBarcode('');
+      setItemCategory('');
+      setItemPurchasePrice('');
+      setItemSalePrice('');
+      setItemMainUnit('شوال');
+      setItemHasSubUnit(false);
+      setItemSubUnitName('كيلو');
+      setItemConversionRate(10);
+      setItemSubUnitSalePrice('');
+      setItemInitialStock(10);
+      setItemMinStock(5);
+      setShowAddItemModal(false);
+    }
+  };
+
+  // Submit Fast Add Customer
+  const handleFastAddCustomer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customerName) {
+      alert('يرجى كتابة اسم العميل');
+      return;
+    }
+    if (onAddContact) {
+      onAddContact({
+        name: customerName,
+        type: 'customer',
+        phone: customerPhone,
+        address: customerAddress,
+        initialBalance: +(customerInitialBalance || 0)
+      });
+      alert(`تم إضافة العميل الجديد "${customerName}" بنجاح!`);
+      // Reset Customer form
+      setCustomerName('');
+      setCustomerPhone('');
+      setCustomerAddress('');
+      setCustomerInitialBalance(0);
+      setShowAddCustomerModal(false);
+    }
+  };
+
+  // Submit Fast Add Appointment
+  const handleFastAddAppointment = (e: React.FormEvent) => {
+    e.preventDefault();
+    let finalCustId = appCustomerId;
+    let finalCustName = '';
+
+    if (!finalCustId) {
+      if (selectedCustomerId) {
+        finalCustId = selectedCustomerId;
+        const custObj = contacts.find(c => c.id === selectedCustomerId);
+        finalCustName = custObj ? custObj.name : 'زبون عام';
+      } else {
+        if (!appCustomerName) {
+          alert('يرجى كتابة اسم العميل للموعد أو اختيار عميل مسجل');
+          return;
+        }
+        finalCustId = 'cust_anonymous';
+        finalCustName = appCustomerName;
+      }
+    } else {
+      const custObj = contacts.find(c => c.id === finalCustId);
+      finalCustName = custObj ? custObj.name : 'زبون عام';
+    }
+
+    if (onAddAppointment) {
+      onAddAppointment({
+        customerId: finalCustId,
+        customerName: finalCustName,
+        date: appDate,
+        time: appTime,
+        notes: appNotes,
+        type: appType
+      });
+      alert(`تم تسجيل وجدولة الموعد للعميل "${finalCustName}" بنجاح!`);
+      // Reset Appointment form
+      setAppCustomerId('');
+      setAppCustomerName('');
+      setAppNotes('');
+      setAppType('delivery');
+      setShowAddAppointmentModal(false);
+    }
+  };
 
   // Re-scale cart prices when currency changes
   const prevCurrencyIdRef = useRef(currency.id);
@@ -70,21 +235,21 @@ export default function POS({ items, contacts, branches, activeBranchId, onSaveS
   // Load hotkeys listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // F1: Focus Search
-      if (e.key === 'F1') {
+      // F1 or F3: Focus Search
+      if (e.key === 'F1' || e.key === 'F3') {
         e.preventDefault();
         searchInputRef.current?.focus();
         searchInputRef.current?.select();
       }
-      // F2: Toggle Payment Type (Cash/Credit)
+      // F2: Complete & Print Invoice / Save
       if (e.key === 'F2') {
         e.preventDefault();
-        setPaymentType(prev => prev === 'cash' ? 'credit' : 'cash');
+        handleCheckout();
       }
-      // F4: Complete & Print Invoice
+      // F4: Toggle Payment Type (Cash/Credit)
       if (e.key === 'F4') {
         e.preventDefault();
-        handleCheckout();
+        setPaymentType(prev => prev === 'cash' ? 'credit' : 'cash');
       }
       // F9: Focus Paid Input
       if (e.key === 'F9') {
@@ -244,11 +409,39 @@ export default function POS({ items, contacts, branches, activeBranchId, onSaveS
         <span className="font-bold flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
           <Keyboard size={14} /> اختصارات لوحة المفاتيح النشطة:
         </span>
-        <span className="bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded"><strong>[F1]</strong> التركيز على البحث</span>
-        <span className="bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded"><strong>[F2]</strong> تبديل نقدي/آجل</span>
+        <span className="bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded"><strong>[F3 / F1]</strong> البحث عن صنف</span>
+        <span className="bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded"><strong>[F2]</strong> حفظ وإتمام الفاتورة</span>
+        <span className="bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded"><strong>[F4]</strong> تبديل طريقة الدفع (نقدي/آجل)</span>
         <span className="bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded"><strong>[F9]</strong> تعديل المبلغ المدفوع</span>
-        <span className="bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded"><strong>[F4]</strong> إتمام الفاتورة والطباعة</span>
         <span className="bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded"><strong>[Esc]</strong> مسح البحث</span>
+      </div>
+
+      {/* ⚡ Quick Popup Creation Actions Bar */}
+      <div className="lg:col-span-12 flex flex-wrap items-center gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-sky-500/10 to-purple-500/10 border border-emerald-500/20 text-slate-800 dark:text-slate-200 shadow-md no-print">
+        <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold mr-1 text-sm">
+          <Sparkles size={16} /> الإجراءات السريعة للفاتورة (دون خروج):
+        </span>
+        <button 
+          type="button"
+          onClick={() => setShowAddItemModal(true)} 
+          className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/10 cursor-pointer"
+        >
+          <Layers size={14} /> إضافة صنف جديد
+        </button>
+        <button 
+          type="button"
+          onClick={() => setShowAddCustomerModal(true)} 
+          className="bg-sky-500 hover:bg-sky-600 active:bg-sky-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-sky-500/10 cursor-pointer"
+        >
+          <UserPlus size={14} /> إضافة عميل جديد
+        </button>
+        <button 
+          type="button"
+          onClick={() => setShowAddAppointmentModal(true)} 
+          className="bg-purple-500 hover:bg-purple-600 active:bg-purple-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-purple-500/10 cursor-pointer"
+        >
+          <Calendar size={14} /> جدولة موعد/مراجعة
+        </button>
       </div>
 
       {/* Cart and Checkout Panel */}
@@ -433,20 +626,30 @@ export default function POS({ items, contacts, branches, activeBranchId, onSaveS
           {/* Customer Selection */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block">العميل / الزبون</label>
-            <div className="relative">
-              <select
-                value={selectedCustomerId}
-                onChange={(e) => setSelectedCustomerId(e.target.value)}
-                className="w-full py-2.5 pr-8 pl-3 rounded-xl glass-input text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+            <div className="flex gap-1.5">
+              <div className="relative flex-1">
+                <select
+                  value={selectedCustomerId}
+                  onChange={(e) => setSelectedCustomerId(e.target.value)}
+                  className="w-full py-2.5 pr-8 pl-3 rounded-xl glass-input text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                >
+                  <option value="">-- زبون نقدي عام مباشر --</option>
+                  {contacts.filter(c => c.type === 'customer' || c.type === 'both').map(cust => (
+                    <option key={cust.id} value={cust.id}>
+                      {cust.name} ({cust.currentBalance < 0 ? `عليه: ${Math.abs(cust.currentBalance)}` : cust.currentBalance > 0 ? `له: ${cust.currentBalance}` : 'خالص'})
+                    </option>
+                  ))}
+                </select>
+                <User className="absolute right-2.5 top-3.5 text-slate-400" size={16} />
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddCustomerModal(true)}
+                className="px-3 bg-sky-500 hover:bg-sky-600 active:bg-sky-700 text-white rounded-xl shadow-md transition-all flex items-center justify-center shrink-0 cursor-pointer"
+                title="إضافة عميل جديد سريعاً"
               >
-                <option value="">-- زبون نقدي عام مباشر --</option>
-                {contacts.filter(c => c.type === 'customer' || c.type === 'both').map(cust => (
-                  <option key={cust.id} value={cust.id}>
-                    {cust.name} ({cust.currentBalance < 0 ? `عليه: ${Math.abs(cust.currentBalance)}` : cust.currentBalance > 0 ? `له: ${cust.currentBalance}` : 'خالص'})
-                  </option>
-                ))}
-              </select>
-              <User className="absolute right-2.5 top-3 text-slate-400" size={16} />
+                <Plus size={18} />
+              </button>
             </div>
           </div>
 
@@ -546,8 +749,459 @@ export default function POS({ items, contacts, branches, activeBranchId, onSaveS
           >
             <Printer size={20} /> حفظ وطباعة الفاتورة [F4]
           </button>
+
+          {/* 📅 Sidebar Upcoming Appointments list widget */}
+          {appointments && appointments.length > 0 && (
+            <div className="p-4 rounded-2xl bg-slate-500/5 border border-white/10 space-y-2.5 mt-2 text-right" dir="rtl">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-800">
+                <h4 className="font-extrabold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                  <Calendar size={13} className="text-purple-500 animate-pulse" /> المراجعات والمواعيد القادمة:
+                </h4>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 font-mono">
+                  {appointments.length}
+                </span>
+              </div>
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {appointments.slice(0, 3).map((app) => (
+                  <div key={app.id} className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 text-xs flex flex-col space-y-1 shadow-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-slate-900 dark:text-white text-[11px] truncate">{app.customerName}</span>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
+                        app.type === 'delivery' ? 'bg-sky-500/10 text-sky-600' :
+                        app.type === 'payment' ? 'bg-emerald-500/10 text-emerald-600' :
+                        app.type === 'visit' ? 'bg-purple-500/10 text-purple-600' : 'bg-slate-500/10 text-slate-600'
+                      }`}>
+                        {app.type === 'delivery' ? 'توصيل' : app.type === 'payment' ? 'سداد' : app.type === 'visit' ? 'زيارة' : 'أخرى'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-400 text-[10px] font-mono">
+                      <span className="flex items-center gap-0.5"><Calendar size={10} /> {app.date}</span>
+                      <span className="flex items-center gap-0.5"><Clock size={10} /> {app.time}</span>
+                    </div>
+                    {app.notes && <p className="text-[10px] text-slate-500 italic truncate">{app.notes}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* 📦 Modal: Fast Add Item */}
+      {showAddItemModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in no-print">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-emerald-500 text-white">
+              <h3 className="font-extrabold text-lg flex items-center gap-2">
+                <Layers size={20} /> إضافة صنف جديد سريعاً
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setShowAddItemModal(false)} 
+                className="hover:bg-white/10 p-1.5 rounded-xl transition-all text-white cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* Form Content */}
+            <form onSubmit={handleFastAddItem} className="p-6 space-y-4 overflow-y-auto flex-1 text-right" dir="rtl">
+              <div className="grid grid-cols-2 gap-4">
+                
+                {/* Item Name */}
+                <div className="col-span-2 space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">اسم الصنف الجديد *</label>
+                  <input
+                    type="text"
+                    required
+                    value={itemName}
+                    onChange={(e) => setItemName(e.target.value)}
+                    placeholder="مثال: شوال دقيق القمح الفاخر 25ك"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-semibold"
+                  />
+                </div>
+
+                {/* Barcode */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">الباركود (اختياري)</label>
+                  <input
+                    type="text"
+                    value={itemBarcode}
+                    onChange={(e) => setItemBarcode(e.target.value)}
+                    placeholder="توليد تلقائي إن ترك فارغاً"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+
+                {/* Category */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">التصنيف/القسم</label>
+                  <input
+                    type="text"
+                    value={itemCategory}
+                    onChange={(e) => setItemCategory(e.target.value)}
+                    placeholder="مثال: البقوليات"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-semibold"
+                  />
+                </div>
+
+                {/* Purchase Price */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">سعر الشراء (كاش)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={itemPurchasePrice}
+                    onChange={(e) => setItemPurchasePrice(e.target.value === '' ? '' : +e.target.value)}
+                    placeholder="0.00"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+
+                {/* Sale Price */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">سعر البيع (الكبرى)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={itemSalePrice}
+                    onChange={(e) => setItemSalePrice(e.target.value === '' ? '' : +e.target.value)}
+                    placeholder="0.00"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+
+                {/* Main Unit */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">الوحدة الكبرى</label>
+                  <select
+                    value={itemMainUnit}
+                    onChange={(e) => setItemMainUnit(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="شوال">شوال</option>
+                    <option value="كرتونة">كرتونة</option>
+                    <option value="صندوق">صندوق</option>
+                    <option value="علبة">علبة</option>
+                    <option value="حبة">حبة</option>
+                    <option value="رزمة">رزمة</option>
+                    <option value="كيلو">كيلو</option>
+                  </select>
+                </div>
+
+                {/* Initial Stock */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-emerald-600 dark:text-emerald-400">الكمية الافتتاحية بالمستودع</label>
+                  <input
+                    type="number"
+                    value={itemInitialStock}
+                    onChange={(e) => setItemInitialStock(e.target.value === '' ? '' : +e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-emerald-50/20 dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+
+                {/* Sub-unit option toggle */}
+                <div className="col-span-2 flex items-center gap-2 py-1.5 border-t border-b border-slate-100 dark:border-slate-800">
+                  <input
+                    type="checkbox"
+                    id="fast_item_subunit"
+                    checked={itemHasSubUnit}
+                    onChange={(e) => setItemHasSubUnit(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500"
+                  />
+                  <label htmlFor="fast_item_subunit" className="text-xs font-extrabold text-slate-800 dark:text-slate-200 cursor-pointer select-none">
+                    يحتوي على تعبئة كرتونة/تجزئة (وحدة صغرى للتفتيت)
+                  </label>
+                </div>
+
+                {/* Conditional Sub-unit options */}
+                {itemHasSubUnit && (
+                  <>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">اسم الوحدة الصغرى</label>
+                      <input
+                        type="text"
+                        value={itemSubUnitName}
+                        onChange={(e) => setItemSubUnitName(e.target.value)}
+                        placeholder="كيلو / علبة صغيرة"
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">معدل التحويل (النسبة)</label>
+                      <input
+                        type="number"
+                        value={itemConversionRate}
+                        onChange={(e) => setItemConversionRate(e.target.value === '' ? '' : +e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                      />
+                    </div>
+
+                    <div className="col-span-2 space-y-1">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">سعر بيع الوحدة الصغرى (التجزئة)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={itemSubUnitSalePrice}
+                        onChange={(e) => setItemSubUnitSalePrice(e.target.value === '' ? '' : +e.target.value)}
+                        placeholder="حساب تلقائي إن بقي فارغاً"
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Min Stock Alert */}
+                <div className="col-span-2 space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">حد إنذار نقص المخزون (تحذير المخازن)</label>
+                  <input
+                    type="number"
+                    value={itemMinStock}
+                    onChange={(e) => setItemMinStock(e.target.value === '' ? '' : +e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddItemModal(false)}
+                  className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold text-sm cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-sm shadow-md cursor-pointer"
+                >
+                  حفظ الصنف وتغذيته
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 👤 Modal: Fast Add Customer */}
+      {showAddCustomerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in no-print">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-sky-500 text-white">
+              <h3 className="font-extrabold text-lg flex items-center gap-2">
+                <UserPlus size={20} /> إضافة حساب عميل جديد
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setShowAddCustomerModal(false)} 
+                className="hover:bg-white/10 p-1.5 rounded-xl transition-all text-white cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* Form */}
+            <form onSubmit={handleFastAddCustomer} className="p-6 space-y-4 text-right" dir="rtl">
+              
+              {/* Name */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">اسم العميل بالكامل *</label>
+                <input
+                  type="text"
+                  required
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="مثال: شركة القدس للتجارة"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500"
+                />
+              </div>
+
+              {/* Phone */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">رقم الهاتف/الجوال</label>
+                <input
+                  type="text"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="مثال: 0599000000"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-950 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono text-left"
+                />
+              </div>
+
+              {/* Address */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">العنوان / الملاحظات</label>
+                <input
+                  type="text"
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  placeholder="مثال: غزة، الرمال - شارع عمر المختار"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 font-semibold"
+                />
+              </div>
+
+              {/* Initial Balance */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">الرصيد الافتتاحي المالي (شيكل)</label>
+                <input
+                  type="number"
+                  value={customerInitialBalance}
+                  onChange={(e) => setCustomerInitialBalance(e.target.value === '' ? '' : +e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono"
+                />
+                <span className="text-[10px] text-slate-400 block mt-0.5">أدخل قيمة سالبة إذا كان العميل عليه ديون سابقة.</span>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCustomerModal(false)}
+                  className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold text-sm cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-extrabold text-sm shadow-md cursor-pointer"
+                >
+                  حفظ العميل
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 📅 Modal: Fast Add Appointment */}
+      {showAddAppointmentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in no-print">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-purple-500 text-white">
+              <h3 className="font-extrabold text-lg flex items-center gap-2">
+                <Calendar size={20} /> تسجيل وجدولة موعد مراجعة
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setShowAddAppointmentModal(false)} 
+                className="hover:bg-white/10 p-1.5 rounded-xl transition-all text-white cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* Form */}
+            <form onSubmit={handleFastAddAppointment} className="p-6 space-y-4 text-right" dir="rtl">
+              
+              {/* Registered Customer Selection */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">ربط مع عميل مسجل (اختياري)</label>
+                <select
+                  value={appCustomerId}
+                  onChange={(e) => {
+                    setAppCustomerId(e.target.value);
+                    if (e.target.value) setAppCustomerName('');
+                  }}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="">-- اكتب اسماً مخصصاً بالأسفل --</option>
+                  {contacts.filter(c => c.type === 'customer' || c.type === 'both').map(cust => (
+                    <option key={cust.id} value={cust.id}>{cust.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Manual Customer Name (if none selected above) */}
+              {!appCustomerId && (
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">اسم العميل المباشر *</label>
+                  <input
+                    type="text"
+                    value={appCustomerName}
+                    onChange={(e) => setAppCustomerName(e.target.value)}
+                    placeholder="اكتب اسم العميل صاحب الموعد"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              )}
+
+              {/* Date & Time Row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">التاريخ</label>
+                  <input
+                    type="date"
+                    required
+                    value={appDate}
+                    onChange={(e) => setAppDate(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 text-left"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">الوقت</label>
+                  <input
+                    type="time"
+                    required
+                    value={appTime}
+                    onChange={(e) => setAppTime(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 text-left"
+                  />
+                </div>
+              </div>
+
+              {/* Appointment Type */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">نوع الإجراء / المراجعة</label>
+                <select
+                  value={appType}
+                  onChange={(e) => setAppType(e.target.value as any)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="delivery">توصيل طلبيات أو شحنة بضاعة</option>
+                  <option value="payment">مراجعة حساب / سداد دفعة مالية</option>
+                  <option value="visit">زيارة فحص ومتابعة فنية</option>
+                  <option value="other">أخرى / مراجعة دورية عامة</option>
+                </select>
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">تفاصيل / ملاحظات الموعد</label>
+                <textarea
+                  value={appNotes}
+                  onChange={(e) => setAppNotes(e.target.value)}
+                  placeholder="مثال: يرجى إحضار عينات من بضائع الفاخرة لتجربتها..."
+                  className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs h-20 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddAppointmentModal(false)}
+                  className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold text-sm cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-purple-500 hover:bg-purple-600 text-white font-extrabold text-sm shadow-md cursor-pointer"
+                >
+                  جدولة الموعد
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

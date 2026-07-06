@@ -3,7 +3,38 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Group, Item, Branch, BranchStock, CustomerSupplier, Sale, Purchase, SalesReturn, Quotation, BranchTransfer, ItemMovement, AuditLogEntry, Currency, Appointment } from './types';
+import { Group, Item, Branch, BranchStock, CustomerSupplier, Sale, Purchase, SalesReturn, PurchaseReturn, Quotation, BranchTransfer, ItemMovement, AuditLogEntry, Currency, Appointment, UserAccount } from './types';
+
+export const INITIAL_USERS: UserAccount[] = [
+  {
+    id: 'user_admin',
+    username: 'admin',
+    password: 'admin',
+    role: 'admin',
+    name: 'أحمد المحترف',
+    permissions: {
+      canDeleteInvoices: true,
+      canAccessSettings: true,
+      canEditInventory: true,
+      canAccessReports: true,
+      canManageUsers: true
+    }
+  },
+  {
+    id: 'user_cashier',
+    username: 'cashier',
+    password: '1234',
+    role: 'cashier',
+    name: 'مسؤول الكاشير والمبيعات',
+    permissions: {
+      canDeleteInvoices: false,
+      canAccessSettings: false,
+      canEditInventory: true,
+      canAccessReports: false,
+      canManageUsers: false
+    }
+  }
+];
 
 export interface GroupData {
   items: Item[];
@@ -13,6 +44,7 @@ export interface GroupData {
   sales: Sale[];
   purchases: Purchase[];
   returns: SalesReturn[];
+  purchaseReturns?: PurchaseReturn[];
   quotations: Quotation[];
   transfers: BranchTransfer[];
   movements: ItemMovement[];
@@ -20,6 +52,7 @@ export interface GroupData {
   currencies?: Currency[];
   selectedCurrencyId?: string;
   appointments?: Appointment[];
+  users?: UserAccount[];
 }
 
 const DEFAULT_GROUPS: Group[] = [
@@ -410,7 +443,7 @@ const getInitialFoodsData = (): GroupData => {
     }
   ];
 
-  return { items, branches, branchStock, contacts, sales, purchases, returns, quotations, transfers, movements, auditLogs };
+  return { items, branches, branchStock, contacts, sales, purchases, returns, purchaseReturns: [], quotations, transfers, movements, auditLogs, users: INITIAL_USERS };
 };
 
 // Initial dummy data for Electrical Group
@@ -596,7 +629,7 @@ const getInitialElectricalData = (): GroupData => {
     }
   ];
 
-  return { items, branches, branchStock, contacts, sales, purchases, returns, quotations, transfers, movements, auditLogs };
+  return { items, branches, branchStock, contacts, sales, purchases, returns, purchaseReturns: [], quotations, transfers, movements, auditLogs, users: INITIAL_USERS };
 };
 
 // DB API functions with LocalStorage caching
@@ -669,11 +702,13 @@ export const getGroupData = (groupId: string): GroupData => {
       sales: [],
       purchases: [],
       returns: [],
+      purchaseReturns: [],
       quotations: [],
       transfers: [],
       movements: [],
       auditLogs: [],
-      appointments: []
+      appointments: [],
+      users: INITIAL_USERS
     };
   }
   

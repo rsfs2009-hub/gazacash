@@ -146,6 +146,19 @@ export interface SalesReturn {
   notes?: string;
 }
 
+export interface PurchaseReturn {
+  id: string;
+  returnNo: string;
+  date: string;
+  originalInvoiceNo?: string;
+  supplierId: string;
+  supplierName: string;
+  branchId: string;
+  items: TransactionItem[];
+  total: number;
+  notes?: string;
+}
+
 export interface Quotation {
   id: string;
   quotationNo: string;
@@ -219,5 +232,20 @@ export interface Appointment {
   notes: string;
   type: 'delivery' | 'payment' | 'visit' | 'other';
   status: 'pending' | 'completed' | 'cancelled';
+}
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  password?: string;
+  role: 'admin' | 'cashier';
+  name: string;
+  permissions: {
+    canDeleteInvoices: boolean;
+    canAccessSettings: boolean;
+    canEditInventory: boolean;
+    canAccessReports: boolean;
+    canManageUsers: boolean;
+  };
 }
 

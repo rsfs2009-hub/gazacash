@@ -12,6 +12,7 @@ import {
   Layers,
   BarChart3,
   Settings,
+  Receipt,
   Sun,
   Moon,
   Plus,
@@ -33,7 +34,19 @@ import {
   TrendingDown,
   ArrowDownLeft,
   Bell,
-  AlertTriangle
+  AlertTriangle,
+  Lock,
+  UserCheck,
+  Filter,
+  SlidersHorizontal,
+  LogOut,
+  Key,
+  Store,
+  Briefcase,
+  ArrowLeft,
+  Eye,
+  Info,
+  X
 } from 'lucide-react';
 
 import {
@@ -50,7 +63,7 @@ import {
   GroupData
 } from './db';
 
-import { Group, Item, Branch, CustomerSupplier, Sale, Purchase, SalesReturn, Quotation, BranchTransfer, ItemMovement, BranchStock, AuditLogEntry, Currency, Appointment } from './types';
+import { Group, Item, Branch, CustomerSupplier, Sale, Purchase, SalesReturn, PurchaseReturn, Quotation, BranchTransfer, ItemMovement, BranchStock, AuditLogEntry, Currency, Appointment, UserAccount } from './types';
 
 // Importing ERP Modules
 import POS from './components/POS';
@@ -58,6 +71,9 @@ import Inventory from './components/Inventory';
 import Contacts from './components/Contacts';
 import Transactions from './components/Transactions';
 import Reports from './components/Reports';
+import SalesManagement from './components/SalesManagement';
+import PurchasesManagement from './components/PurchasesManagement';
+import { UsersManagement } from './components/UsersManagement';
 
 // @ts-ignore
 import defaultLogo from './assets/images/app_logo_1783192654934.jpg';
@@ -183,7 +199,27 @@ export default function App() {
   });
 
   const [themeMode, setThemeState] = useState<'light' | 'dark'>(getTheme);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'contacts' | 'transactions' | 'reports' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'contacts' | 'transactions' | 'reports' | 'settings' | 'sales-management' | 'purchases-management'>('dashboard');
+  
+  const [userRole, setUserRole] = useState<'admin' | 'cashier'>(() => {
+    return (localStorage.getItem('gaza_cash_user_role') as 'admin' | 'cashier') || 'admin';
+  });
+
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return sessionStorage.getItem('gaza_cash_auth') === 'true';
+  });
+
+  const [isGroupSelected, setIsGroupSelected] = useState<boolean>(() => {
+    return sessionStorage.getItem('gaza_cash_group_selected') === 'true';
+  });
+
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [showCreateGroupOnOnboarding, setShowCreateGroupOnOnboarding] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('gaza_cash_user_role', userRole);
+  }, [userRole]);
   const [reportsSubTab, setReportsSubTab] = useState<'sales' | 'purchases' | 'accounts' | 'stock' | 'trial-balance' | 'final-accounts' | 'profits'>('sales');
   const [inventorySubTab, setInventorySubTab] = useState<'items' | 'branches' | 'transfers' | 'ledger' | 'import' | 'adjust'>('items');
   const [transactionsSubTab, setTransactionsSubTab] = useState<'purchase' | 'return' | 'quotation'>('purchase');
@@ -203,6 +239,8 @@ export default function App() {
   // Administrative Operations & Audit Log States
   const [logoPreview, setLogoPreview] = useState<string>('');
   const [selectedThemeColor, setSelectedThemeColor] = useState<string>('emerald');
+  const [base64Logo, setBase64Logo] = useState<string>('');
+  const [lastPrintedSale, setLastPrintedSale] = useState<Sale | null>(null);
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
   const [adjItemId, setAdjItemId] = useState('');
   const [adjBranchId, setAdjBranchId] = useState('');
@@ -211,6 +249,24 @@ export default function App() {
   const [delInvoiceNo, setDelInvoiceNo] = useState('');
   const [delReason, setDelReason] = useState('');
   const [logSearchQuery, setLogSearchQuery] = useState('');
+  const [logOperatorFilter, setLogOperatorFilter] = useState('');
+  const [logActionFilter, setLogActionFilter] = useState('');
+  const [logSeverityFilter, setLogSeverityFilter] = useState('');
+  const [selectedAuditLog, setSelectedAuditLog] = useState<AuditLogEntry | null>(null);
+
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDanger?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    isDanger: false
+  });
 
   // Initialize data on mount
   useEffect(() => {
@@ -241,6 +297,39 @@ export default function App() {
     setSelectedThemeColor(activeG?.settings?.themeColor || 'emerald');
   }, [activeGroupId, groups]);
 
+  // Convert logo to Base64 to ensure offline printing works
+  useEffect(() => {
+    const activeG = groups.find(g => g.id === activeGroupId);
+    const logoSrc = activeG?.settings?.logoUrl || defaultLogo;
+    if (logoSrc.startsWith('data:image/')) {
+      setBase64Logo(logoSrc);
+    } else {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          try {
+            const dataURL = canvas.toDataURL('image/jpeg');
+            setBase64Logo(dataURL);
+            return;
+          } catch (e) {
+            console.error("Base64 conversion failed", e);
+          }
+        }
+        setBase64Logo(logoSrc);
+      };
+      img.onerror = () => {
+        setBase64Logo(logoSrc);
+      };
+      img.src = logoSrc;
+    }
+  }, [activeGroupId, groups]);
+
   // Sync state modifications to LocalStorage database
   const saveStateToDB = (updatedData: GroupData) => {
     setGroupDataState(updatedData);
@@ -268,6 +357,42 @@ export default function App() {
     const data = getGroupData(groupId);
     setGroupDataState(data);
     setAiAnalysis(''); // Clear past reports insights
+  };
+
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    
+    const usersList = groupData.users || [];
+    const matchingUser = usersList.find(u => u.role === userRole && u.password === loginPassword);
+    
+    const isDefaultAdmin = userRole === 'admin' && loginPassword === 'admin';
+    const isDefaultCashier = userRole === 'cashier' && loginPassword === '1234';
+
+    if (matchingUser || isDefaultAdmin || isDefaultCashier) {
+      sessionStorage.setItem('gaza_cash_auth', 'true');
+      setIsAuthenticated(true);
+      setLoginPassword('');
+    } else {
+      setLoginError(
+        userRole === 'admin'
+          ? 'رمز دخول المدير غير صحيح!'
+          : 'رمز دخول الكاشير غير صحيح!'
+      );
+    }
+  };
+
+  const handleSelectGroupOnboarding = (groupId: string) => {
+    handleGroupChange(groupId);
+    sessionStorage.setItem('gaza_cash_group_selected', 'true');
+    setIsGroupSelected(true);
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('gaza_cash_auth');
+    sessionStorage.removeItem('gaza_cash_group_selected');
+    setIsAuthenticated(false);
+    setIsGroupSelected(false);
   };
 
   // --- MULTI-CURRENCY LOGIC AND HANDLERS ---
@@ -460,6 +585,11 @@ export default function App() {
   };
 
   const handleDeleteInvoice = (invoiceNo: string, reason: string) => {
+    if (userRole === 'cashier') {
+      alert('🔒 عذراً! تم إلغاء العملية. دور "كاشير مبيعات" غير مخوّل بحذف أو تعديل الفواتير المعتمدة. يرجى مراجعة مدير النظام.');
+      return;
+    }
+
     const isSale = invoiceNo.startsWith('INV');
     const isPurchase = invoiceNo.startsWith('PUR');
     
@@ -601,82 +731,112 @@ export default function App() {
   };
 
   const handleClearAuditLogs = () => {
-    if (!window.confirm('هل أنت متأكد من رغبتك في تصفير وإفراغ سجل النشاط بالكامل؟ لا يمكن التراجع عن هذا الإجراء.')) {
+    if (userRole === 'cashier') {
+      alert('🔒 عذراً! تم إلغاء العملية. دور "كاشير مبيعات" غير مخوّل بمسح سجل الأمان والمساءلة النشط.');
       return;
     }
-    const currentData = {
-      ...groupData
-    };
-    const updatedLogs = appendAuditLog(
-      'تصفير سجل النشاط',
-      'قام مدير النظام بعملية تفريغ وتطهير شاملة لكامل سجلات النشاط والعمليات الحساسة السابقة لزيادة التبسيط والاعتمادية الجارية.',
-      'critical',
-      currentData
-    );
-    saveStateToDB({
-      ...currentData,
-      auditLogs: updatedLogs
+    
+    setConfirmModal({
+      isOpen: true,
+      title: 'تصفير سجل النشاط بالكامل',
+      message: 'هل أنت متأكد من رغبتك في تصفير وإفراغ سجل النشاط بالكامل؟ لا يمكن التراجع عن هذا الإجراء.',
+      isDanger: true,
+      onConfirm: () => {
+        const currentData = {
+          ...groupData
+        };
+        const updatedLogs = appendAuditLog(
+          'تصفير سجل النشاط',
+          'قام مدير النظام بعملية تفريغ وتطهير شاملة لكامل سجلات النشاط والعمليات الحساسة السابقة لزيادة التبسيط والاعتمادية الجارية.',
+          'critical',
+          currentData
+        );
+        saveStateToDB({
+          ...currentData,
+          auditLogs: updatedLogs
+        });
+        alert('تم تصفير سجل النشاط وإعادة ضبط المخرجات بنجاح!');
+      }
     });
-    alert('تم تصفير سجل النشاط وإعادة ضبط المخرجات بنجاح!');
   };
 
   const handleResetCurrentGroup = (wipeClean: boolean) => {
+    if (userRole === 'cashier') {
+      alert('🔒 عذراً! تم إلغاء العملية. دور "كاشير مبيعات" غير مخوّل بمسح أو تصفير بيانات المجموعة.');
+      return;
+    }
     const actionName = wipeClean ? 'تصفير كامل لبيانات المجموعة' : 'إعادة تعيين المجموعة للبيانات الافتراضية';
     const confirmationText = wipeClean 
       ? `تحذير حرج: هل أنت متأكد من مسح وتفريغ كامل بيانات المجموعة الحالية "${shopMeta.name}"؟\nسيتم حذف كافة الأصناف، المستودعات، الفروع، الفواتير، وحسابات العملاء والموردين بشكل نهائي!`
       : `هل أنت متأكد من إعادة تعيين المجموعة الحالية "${shopMeta.name}" إلى البيانات التجريبية الافتراضية؟\nسيتم استبدال البيانات الحالية ببيانات تجريبية أولية وتحديث المستندات وحركات المخازن.`;
 
-    if (!window.confirm(confirmationText)) return;
+    setConfirmModal({
+      isOpen: true,
+      title: actionName,
+      message: confirmationText,
+      isDanger: wipeClean,
+      onConfirm: () => {
+        let targetData: GroupData;
+        if (wipeClean) {
+          targetData = {
+            items: [],
+            branches: [{ id: `branch_${activeGroupId}_main`, name: 'المستودع الرئيسي الافتراضي', location: shopMeta.address || 'غزة' }],
+            branchStock: [],
+            contacts: [],
+            sales: [],
+            purchases: [],
+            returns: [],
+            quotations: [],
+            transfers: [],
+            movements: [],
+            auditLogs: []
+          };
+        } else {
+          localStorage.removeItem(`gaza_cash_data_${activeGroupId}`);
+          targetData = getGroupData(activeGroupId);
+        }
 
-    let targetData: GroupData;
-    if (wipeClean) {
-      targetData = {
-        items: [],
-        branches: [{ id: `branch_${activeGroupId}_main`, name: 'المستودع الرئيسي الافتراضي', location: shopMeta.address || 'غزة' }],
-        branchStock: [],
-        contacts: [],
-        sales: [],
-        purchases: [],
-        returns: [],
-        quotations: [],
-        transfers: [],
-        movements: [],
-        auditLogs: []
-      };
-    } else {
-      localStorage.removeItem(`gaza_cash_data_${activeGroupId}`);
-      targetData = getGroupData(activeGroupId);
-    }
+        const logs = appendAuditLog(
+          actionName,
+          wipeClean 
+            ? `قام مدير النظام بعملية مسح شاملة (Wipe Out) لجميع السجلات والأرصدة والذمم المالية للمجموعة وتصفيرها بالكامل.`
+            : `تمت إعادة تهيئة المجموعة وتعبئتها بالبيانات التجريبية الافتراضية لغرض الفحص والتدريب.`,
+          'critical',
+          targetData
+        );
 
-    const logs = appendAuditLog(
-      actionName,
-      wipeClean 
-        ? `قام مدير النظام بعملية مسح شاملة (Wipe Out) لجميع السجلات والأرصدة والذمم المالية للمجموعة وتصفيرها بالكامل.`
-        : `تمت إعادة تهيئة المجموعة وتعبئتها بالبيانات التجريبية الافتراضية لغرض الفحص والتدريب.`,
-      'critical',
-      targetData
-    );
-
-    targetData.auditLogs = logs;
-    saveStateToDB(targetData);
-    alert(wipeClean ? 'تم تصفير بيانات المجموعة بالكامل بنجاح!' : 'تم إعادة تعيين المجموعة للبيانات التجريبية الافتراضية بنجاح!');
+        targetData.auditLogs = logs;
+        saveStateToDB(targetData);
+        alert(wipeClean ? 'تم تصفير بيانات المجموعة بالكامل بنجاح!' : 'تم إعادة تعيين المجموعة للبيانات التجريبية الافتراضية بنجاح!');
+      }
+    });
   };
 
   const handleSystemFactoryReset = () => {
-    if (!window.confirm('🚨 تحذير نهائي وقاطع:\nأنت تقوم بطلب إعادة تعيين المنظومة بالكامل إلى حالة التثبيت الأولى وتصفير كافة المجموعات والبيانات المسجلة.\nسيؤدي هذا الإجراء إلى حذف جميع البيانات والنسخ والملفات وسجلات الحركة وحسابات الأطراف ولا يمكن التراجع عنه.\nهل ترغب في الاستمرار؟')) {
+    if (userRole === 'cashier') {
+      alert('🔒 عذراً! تم إلغاء العملية. دور "كاشير مبيعات" غير مخوّل بالقيام بإعادة تعيين المصنع للمنظومة.');
       return;
     }
-    localStorage.removeItem('gaza_cash_groups');
-    localStorage.removeItem('gaza_cash_active_group_id');
-    localStorage.removeItem('gaza_cash_theme');
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('gaza_cash_data_')) {
-        localStorage.removeItem(key);
+    
+    setConfirmModal({
+      isOpen: true,
+      title: 'إعادة ضبط المصنع بالكامل',
+      message: '🚨 تحذير نهائي وقاطع:\nأنت تقوم بطلب إعادة تعيين المنظومة بالكامل إلى حالة التثبيت الأولى وتصفير كافة المجموعات والبيانات المسجلة.\nسيؤدي هذا الإجراء إلى حذف جميع البيانات والنسخ والملفات وسجلات الحركة وحسابات الأطراف ولا يمكن التراجع عنه.\nهل ترغب في الاستمرار؟',
+      isDanger: true,
+      onConfirm: () => {
+        localStorage.removeItem('gaza_cash_groups');
+        localStorage.removeItem('gaza_cash_active_group_id');
+        localStorage.removeItem('gaza_cash_theme');
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('gaza_cash_data_')) {
+            localStorage.removeItem(key);
+          }
+        }
+        alert('تم تصفير وإعادة تعيين النظام بالكامل إلى حالة التثبيت الافتراضية بنجاح! سيتم الآن إعادة تحميل البرنامج.');
+        window.location.reload();
       }
-    }
-    alert('تم تصفير وإعادة تعيين النظام بالكامل إلى حالة التثبيت الافتراضية بنجاح! سيتم الآن إعادة تحميل البرنامج.');
-    window.location.reload();
+    });
   };
 
   // --- BUSINESS ACTION HANDLERS ---
@@ -941,6 +1101,667 @@ export default function App() {
     saveStateToDB({
       ...groupData,
       quotations: [newQuotation, ...groupData.quotations]
+    });
+  };
+
+  // 4a. Update Sale (تعديل فاتورة مبيعات صالحة بالكامل)
+  const handleUpdateSale = (saleId: string, updatedSale: Sale) => {
+    if (userRole === 'cashier') {
+      alert('🔒 عذراً! تم إلغاء العملية. دور "كاشير مبيعات" غير مخوّل بتعديل الفواتير المعتمدة. يرجى مراجعة مدير النظام.');
+      return;
+    }
+
+    const oldSale = groupData.sales.find(s => s.id === saleId);
+    if (!oldSale) {
+      alert('الفاتورة الأصلية غير موجودة!');
+      return;
+    }
+
+    const updatedBranchStock = [...groupData.branchStock];
+    const updatedMovements = [...groupData.movements];
+    const updatedContacts = [...groupData.contacts];
+
+    // Revert Old Sale Stock
+    oldSale.items.forEach(saleItem => {
+      const itemMeta = groupData.items.find(i => i.id === saleItem.itemId);
+      if (!itemMeta) return;
+
+      let additionQty = saleItem.quantity;
+      if (saleItem.isSubUnitUsed && itemMeta.conversionRate) {
+        additionQty = saleItem.quantity / itemMeta.conversionRate;
+      }
+
+      const stockEntry = updatedBranchStock.find(
+        st => st.itemId === saleItem.itemId && st.branchId === oldSale.branchId
+      );
+
+      if (stockEntry) {
+        stockEntry.quantity += additionQty;
+      } else {
+        updatedBranchStock.push({
+          itemId: saleItem.itemId,
+          branchId: oldSale.branchId,
+          quantity: additionQty
+        });
+      }
+    });
+
+    // Revert Old Customer Balance
+    if (oldSale.customerId) {
+      const contactIdx = updatedContacts.findIndex(c => c.id === oldSale.customerId);
+      if (contactIdx > -1) {
+        const contact = updatedContacts[contactIdx];
+        const outstandingAmount = oldSale.total - oldSale.paidAmount;
+        contact.currentBalance += outstandingAmount;
+      }
+    }
+
+    // Filter out old movements
+    const filteredMovements = updatedMovements.filter(m => m.referenceNo !== oldSale.invoiceNo);
+
+    // Apply New Sale Stock
+    updatedSale.items.forEach(saleItem => {
+      const itemMeta = groupData.items.find(i => i.id === saleItem.itemId);
+      if (!itemMeta) return;
+
+      let deductionQty = saleItem.quantity;
+      if (saleItem.isSubUnitUsed && itemMeta.conversionRate) {
+        deductionQty = saleItem.quantity / itemMeta.conversionRate;
+      }
+
+      const stockEntry = updatedBranchStock.find(
+        st => st.itemId === saleItem.itemId && st.branchId === updatedSale.branchId
+      );
+
+      if (stockEntry) {
+        stockEntry.quantity = Math.max(0, stockEntry.quantity - deductionQty);
+      } else {
+        updatedBranchStock.push({
+          itemId: saleItem.itemId,
+          branchId: updatedSale.branchId,
+          quantity: 0
+        });
+      }
+
+      // Record detailed movement
+      filteredMovements.push({
+        id: `mov_${Date.now()}_${saleItem.itemId}_upd`,
+        itemId: saleItem.itemId,
+        itemName: saleItem.itemName,
+        date: updatedSale.date,
+        type: 'sale',
+        referenceNo: updatedSale.invoiceNo,
+        branchId: updatedSale.branchId,
+        branchName: updatedSale.branchName,
+        quantityChange: -deductionQty,
+        unitName: saleItem.unitName,
+        description: `تعديل فاتورة مبيعات رقم ${updatedSale.invoiceNo} للزبون ${updatedSale.customerName}`
+      });
+    });
+
+    // Apply New Customer Balance
+    if (updatedSale.customerId) {
+      const contactIdx = updatedContacts.findIndex(c => c.id === updatedSale.customerId);
+      if (contactIdx > -1) {
+        const contact = updatedContacts[contactIdx];
+        const outstandingAmount = updatedSale.total - updatedSale.paidAmount;
+        contact.currentBalance -= outstandingAmount;
+      }
+    }
+
+    const updatedSales = groupData.sales.map(s => s.id === saleId ? updatedSale : s);
+
+    const currentData = {
+      ...groupData,
+      sales: updatedSales,
+      branchStock: updatedBranchStock,
+      movements: filteredMovements,
+      contacts: updatedContacts
+    };
+
+    const updatedLogs = appendAuditLog(
+      'تعديل فاتورة مبيعات',
+      `تم تعديل وتصحيح تفاصيل فاتورة مبيعات رقم ${updatedSale.invoiceNo} بقيمة جديدة ${updatedSale.total.toFixed(2)} شيكل للزبون "${updatedSale.customerName}".`,
+      'warning',
+      currentData
+    );
+
+    saveStateToDB({
+      ...currentData,
+      auditLogs: updatedLogs
+    });
+  };
+
+  // 4b. Update Sales Return
+  const handleUpdateReturn = (returnId: string, updatedReturn: SalesReturn) => {
+    if (userRole === 'cashier') {
+      alert('🔒 عذراً! تم إلغاء العملية. دور "كاشير مبيعات" غير مخوّل بتعديل المرتجعات المعتمدة. يرجى مراجعة مدير النظام.');
+      return;
+    }
+
+    const oldReturn = groupData.returns.find(r => r.id === returnId);
+    if (!oldReturn) {
+      alert('سند المرتجع الأصلي غير موجود!');
+      return;
+    }
+
+    const updatedBranchStock = [...groupData.branchStock];
+    const updatedMovements = [...groupData.movements];
+    const updatedContacts = [...groupData.contacts];
+
+    // Revert Old Return Stock
+    oldReturn.items.forEach(retItem => {
+      const itemMeta = groupData.items.find(i => i.id === retItem.itemId);
+      if (!itemMeta) return;
+
+      let returnQtyInMain = retItem.quantity;
+      if (retItem.isSubUnitUsed && itemMeta.conversionRate) {
+        returnQtyInMain = retItem.quantity / itemMeta.conversionRate;
+      }
+
+      const stockEntry = updatedBranchStock.find(
+        st => st.itemId === retItem.itemId && st.branchId === oldReturn.branchId
+      );
+
+      if (stockEntry) {
+        stockEntry.quantity = Math.max(0, stockEntry.quantity - returnQtyInMain);
+      }
+    });
+
+    // Revert Old Customer Balance
+    if (oldReturn.customerId) {
+      const contactIdx = updatedContacts.findIndex(c => c.id === oldReturn.customerId);
+      if (contactIdx > -1) {
+        const contact = updatedContacts[contactIdx];
+        contact.currentBalance -= oldReturn.total;
+      }
+    }
+
+    // Filter old movements
+    const filteredMovements = updatedMovements.filter(m => m.referenceNo !== oldReturn.returnNo);
+
+    // Apply New Return Stock
+    updatedReturn.items.forEach(retItem => {
+      const itemMeta = groupData.items.find(i => i.id === retItem.itemId);
+      if (!itemMeta) return;
+
+      let returnQtyInMain = retItem.quantity;
+      if (retItem.isSubUnitUsed && itemMeta.conversionRate) {
+        returnQtyInMain = retItem.quantity / itemMeta.conversionRate;
+      }
+
+      const stockEntry = updatedBranchStock.find(
+        st => st.itemId === retItem.itemId && st.branchId === updatedReturn.branchId
+      );
+
+      if (stockEntry) {
+        stockEntry.quantity += returnQtyInMain;
+      } else {
+        updatedBranchStock.push({
+          itemId: retItem.itemId,
+          branchId: updatedReturn.branchId,
+          quantity: returnQtyInMain
+        });
+      }
+
+      // Record detailed movement
+      filteredMovements.push({
+        id: `mov_${Date.now()}_${retItem.itemId}_upd`,
+        itemId: retItem.itemId,
+        itemName: retItem.itemName,
+        date: updatedReturn.date,
+        type: 'return_in',
+        referenceNo: updatedReturn.returnNo,
+        branchId: updatedReturn.branchId,
+        branchName: groupData.branches.find(b => b.id === updatedReturn.branchId)?.name || 'الفرع الرئيسي',
+        quantityChange: returnQtyInMain,
+        unitName: retItem.unitName,
+        description: `تعديل مرتجع مبيعات رقم ${updatedReturn.returnNo} للزبون ${updatedReturn.customerName}`
+      });
+    });
+
+    // Apply New Customer Balance
+    if (updatedReturn.customerId) {
+      const contactIdx = updatedContacts.findIndex(c => c.id === updatedReturn.customerId);
+      if (contactIdx > -1) {
+        const contact = updatedContacts[contactIdx];
+        contact.currentBalance += updatedReturn.total;
+      }
+    }
+
+    const updatedReturns = groupData.returns.map(r => r.id === returnId ? updatedReturn : r);
+
+    const currentData = {
+      ...groupData,
+      returns: updatedReturns,
+      branchStock: updatedBranchStock,
+      movements: filteredMovements,
+      contacts: updatedContacts
+    };
+
+    const updatedLogs = appendAuditLog(
+      'تعديل مرتجع مبيعات',
+      `تم تعديل وتصحيح تفاصيل مرتجع المبيعات رقم ${updatedReturn.returnNo} بقيمة جديدة ${updatedReturn.total.toFixed(2)} شيكل للزبون "${updatedReturn.customerName}".`,
+      'warning',
+      currentData
+    );
+
+    saveStateToDB({
+      ...currentData,
+      auditLogs: updatedLogs
+    });
+  };
+
+  // 4c. Delete Sales Return
+  const handleDeleteReturn = (returnId: string, reason: string) => {
+    if (userRole === 'cashier') {
+      alert('🔒 عذراً! تم إلغاء العملية. دور "كاشير مبيعات" غير مخوّل بحذف المرتجعات. يرجى مراجعة مدير النظام.');
+      return;
+    }
+
+    const oldReturn = groupData.returns.find(r => r.id === returnId);
+    if (!oldReturn) {
+      alert('سند المرتجع غير موجود!');
+      return;
+    }
+
+    const updatedBranchStock = [...groupData.branchStock];
+    const updatedMovements = [...groupData.movements];
+    const updatedContacts = [...groupData.contacts];
+
+    // Revert return stock effects (deduct from branch stock)
+    oldReturn.items.forEach(retItem => {
+      const itemMeta = groupData.items.find(i => i.id === retItem.itemId);
+      if (!itemMeta) return;
+
+      let returnQtyInMain = retItem.quantity;
+      if (retItem.isSubUnitUsed && itemMeta.conversionRate) {
+        returnQtyInMain = retItem.quantity / itemMeta.conversionRate;
+      }
+
+      const stockEntry = updatedBranchStock.find(
+        st => st.itemId === retItem.itemId && st.branchId === oldReturn.branchId
+      );
+
+      if (stockEntry) {
+        stockEntry.quantity = Math.max(0, stockEntry.quantity - returnQtyInMain);
+      }
+    });
+
+    // Revert client financial refund
+    if (oldReturn.customerId) {
+      const contactIdx = updatedContacts.findIndex(c => c.id === oldReturn.customerId);
+      if (contactIdx > -1) {
+        const contact = updatedContacts[contactIdx];
+        contact.currentBalance -= oldReturn.total;
+      }
+    }
+
+    const updatedReturns = groupData.returns.filter(r => r.id !== returnId);
+    const filteredMovements = updatedMovements.filter(m => m.referenceNo !== oldReturn.returnNo);
+
+    const currentData = {
+      ...groupData,
+      returns: updatedReturns,
+      branchStock: updatedBranchStock,
+      movements: filteredMovements,
+      contacts: updatedContacts
+    };
+
+    const updatedLogs = appendAuditLog(
+      'حذف مرتجع مبيعات',
+      `تم إلغاء وحذف سند مرتجع المبيعات رقم ${oldReturn.returnNo} بقيمة ${oldReturn.total.toFixed(2)} شيكل للزبون "${oldReturn.customerName}". السبب: ${reason || 'لم يذكر'}.`,
+      'critical',
+      currentData
+    );
+
+    saveStateToDB({
+      ...currentData,
+      auditLogs: updatedLogs
+    });
+  };
+
+  // 4d. Update Purchase (تعديل وإعادة محاسبة فاتورة توريد/شراء)
+  const handleUpdatePurchase = (purchaseId: string, updatedPurchase: Purchase) => {
+    if (userRole === 'cashier') {
+      alert('🔒 عذراً! تم إلغاء العملية. غير مخوّل بتعديل الفواتير المعتمدة. يرجى مراجعة مدير النظام.');
+      return;
+    }
+
+    const oldPurchase = groupData.purchases.find(p => p.id === purchaseId);
+    if (!oldPurchase) {
+      alert('الفاتورة الأصلية غير موجودة!');
+      return;
+    }
+
+    const updatedBranchStock = [...groupData.branchStock];
+    const updatedMovements = [...groupData.movements];
+    const updatedContacts = [...groupData.contacts];
+
+    // Revert Old Purchase Stock (Subtract old quantities)
+    oldPurchase.items.forEach(purchItem => {
+      const stockEntry = updatedBranchStock.find(
+        st => st.itemId === purchItem.itemId && st.branchId === oldPurchase.branchId
+      );
+      if (stockEntry) {
+        stockEntry.quantity = Math.max(0, stockEntry.quantity - purchItem.quantity);
+      }
+    });
+
+    // Revert Old Supplier Balance (positive balances denote "له علينا")
+    if (oldPurchase.supplierId) {
+      const contactIdx = updatedContacts.findIndex(c => c.id === oldPurchase.supplierId);
+      if (contactIdx > -1) {
+        const contact = updatedContacts[contactIdx];
+        const unpaidSupplierDebt = oldPurchase.total - oldPurchase.paidAmount;
+        contact.currentBalance -= unpaidSupplierDebt;
+      }
+    }
+
+    // Filter out old movements
+    const filteredMovements = updatedMovements.filter(m => m.referenceNo !== oldPurchase.invoiceNo);
+
+    // Apply New Purchase Stock (Add new quantities)
+    updatedPurchase.items.forEach(purchItem => {
+      const stockEntry = updatedBranchStock.find(
+        st => st.itemId === purchItem.itemId && st.branchId === updatedPurchase.branchId
+      );
+
+      if (stockEntry) {
+        stockEntry.quantity += purchItem.quantity;
+      } else {
+        updatedBranchStock.push({
+          itemId: purchItem.itemId,
+          branchId: updatedPurchase.branchId,
+          quantity: purchItem.quantity
+        });
+      }
+
+      // Record detailed movement
+      filteredMovements.push({
+        id: `mov_${Date.now()}_${purchItem.itemId}_upd`,
+        itemId: purchItem.itemId,
+        itemName: purchItem.itemName,
+        date: updatedPurchase.date,
+        type: 'purchase',
+        referenceNo: updatedPurchase.invoiceNo,
+        branchId: updatedPurchase.branchId,
+        branchName: updatedPurchase.branchName,
+        quantityChange: purchItem.quantity,
+        unitName: purchItem.unitName,
+        description: `تعديل فاتورة شراء رقم ${updatedPurchase.invoiceNo} من المورد ${updatedPurchase.supplierName}`
+      });
+    });
+
+    // Apply New Supplier Balance
+    if (updatedPurchase.supplierId) {
+      const contactIdx = updatedContacts.findIndex(c => c.id === updatedPurchase.supplierId);
+      if (contactIdx > -1) {
+        const contact = updatedContacts[contactIdx];
+        const unpaidSupplierDebt = updatedPurchase.total - updatedPurchase.paidAmount;
+        contact.currentBalance += unpaidSupplierDebt;
+      }
+    }
+
+    const updatedPurchases = groupData.purchases.map(p => p.id === purchaseId ? updatedPurchase : p);
+
+    const currentData = {
+      ...groupData,
+      purchases: updatedPurchases,
+      branchStock: updatedBranchStock,
+      movements: filteredMovements,
+      contacts: updatedContacts
+    };
+
+    const updatedLogs = appendAuditLog(
+      'تعديل فاتورة مشتريات',
+      `تم تعديل وتصحيح تفاصيل فاتورة مشتريات رقم ${updatedPurchase.invoiceNo} بقيمة جديدة ${updatedPurchase.total.toFixed(2)} شيكل للمورد "${updatedPurchase.supplierName}".`,
+      'warning',
+      currentData
+    );
+
+    saveStateToDB({
+      ...currentData,
+      auditLogs: updatedLogs
+    });
+  };
+
+  // 4e. Save Purchase Return (تسجيل سند مرتجع مشتريات للمورد)
+  const handleSavePurchaseReturn = (returnData: Omit<PurchaseReturn, 'id' | 'returnNo' | 'date'>) => {
+    const nextReturnNo = `PUR-RET-${new Date().getFullYear()}-${String(((groupData.purchaseReturns || []).length) + 1).padStart(4, '0')}`;
+    const newReturn: PurchaseReturn = {
+      ...returnData,
+      id: `pur_ret_${Date.now()}`,
+      returnNo: nextReturnNo,
+      date: new Date().toISOString()
+    };
+
+    const updatedReturns = [newReturn, ...(groupData.purchaseReturns || [])];
+    const updatedBranchStock = [...groupData.branchStock];
+    const updatedMovements = [...groupData.movements];
+    const updatedContacts = [...groupData.contacts];
+
+    // Deduct stock for returned items
+    newReturn.items.forEach(retItem => {
+      const stockEntry = updatedBranchStock.find(
+        st => st.itemId === retItem.itemId && st.branchId === newReturn.branchId
+      );
+
+      if (stockEntry) {
+        stockEntry.quantity = Math.max(0, stockEntry.quantity - retItem.quantity);
+      }
+
+      // Record item ledger movement
+      updatedMovements.push({
+        id: `mov_${Date.now()}_${retItem.itemId}`,
+        itemId: retItem.itemId,
+        itemName: retItem.itemName,
+        date: newReturn.date,
+        type: 'transfer_out',
+        referenceNo: newReturn.returnNo,
+        branchId: newReturn.branchId,
+        branchName: groupData.branches.find(b => b.id === newReturn.branchId)?.name || 'الفرع الرئيسي',
+        quantityChange: -retItem.quantity,
+        unitName: retItem.unitName,
+        description: `مرتجع مشتريات رقم ${newReturn.returnNo} للمورد ${newReturn.supplierName}`
+      });
+    });
+
+    // Update Supplier Balance (Subtract total because we returned goods, reducing liability)
+    if (newReturn.supplierId) {
+      const contactIdx = updatedContacts.findIndex(c => c.id === newReturn.supplierId);
+      if (contactIdx > -1) {
+        const contact = updatedContacts[contactIdx];
+        contact.currentBalance -= newReturn.total;
+      }
+    }
+
+    const currentData = {
+      ...groupData,
+      purchaseReturns: updatedReturns,
+      branchStock: updatedBranchStock,
+      movements: updatedMovements,
+      contacts: updatedContacts
+    };
+
+    const updatedLogs = appendAuditLog(
+      'تسجيل مرتجع مشتريات',
+      `تم تسجيل سند مرتجع مشتريات للمورد رقم ${newReturn.returnNo} بقيمة ${newReturn.total.toFixed(2)} شيكل للمورد "${newReturn.supplierName}".`,
+      'info',
+      currentData
+    );
+
+    saveStateToDB({
+      ...currentData,
+      auditLogs: updatedLogs
+    });
+  };
+
+  // 4f. Update Purchase Return
+  const handleUpdatePurchaseReturn = (returnId: string, updatedReturn: PurchaseReturn) => {
+    if (userRole === 'cashier') {
+      alert('🔒 عذراً! تم إلغاء العملية. غير مخوّل بتعديل المرتجعات المعتمدة. يرجى مراجعة مدير النظام.');
+      return;
+    }
+
+    const oldReturn = (groupData.purchaseReturns || []).find(r => r.id === returnId);
+    if (!oldReturn) {
+      alert('سند المرتجع الأصلي غير موجود!');
+      return;
+    }
+
+    const updatedBranchStock = [...groupData.branchStock];
+    const updatedMovements = [...groupData.movements];
+    const updatedContacts = [...groupData.contacts];
+
+    // Revert Old Return Stock (Add old returned quantities back)
+    oldReturn.items.forEach(retItem => {
+      const stockEntry = updatedBranchStock.find(
+        st => st.itemId === retItem.itemId && st.branchId === oldReturn.branchId
+      );
+      if (stockEntry) {
+        stockEntry.quantity += retItem.quantity;
+      } else {
+        updatedBranchStock.push({
+          itemId: retItem.itemId,
+          branchId: oldReturn.branchId,
+          quantity: retItem.quantity
+        });
+      }
+    });
+
+    // Revert Old Supplier Balance (add back old total, increasing liability)
+    if (oldReturn.supplierId) {
+      const contactIdx = updatedContacts.findIndex(c => c.id === oldReturn.supplierId);
+      if (contactIdx > -1) {
+        const contact = updatedContacts[contactIdx];
+        contact.currentBalance += oldReturn.total;
+      }
+    }
+
+    // Filter old movements
+    const filteredMovements = updatedMovements.filter(m => m.referenceNo !== oldReturn.returnNo);
+
+    // Apply New Return Stock (Deduct new returned quantities)
+    updatedReturn.items.forEach(retItem => {
+      const stockEntry = updatedBranchStock.find(
+        st => st.itemId === retItem.itemId && st.branchId === updatedReturn.branchId
+      );
+      if (stockEntry) {
+        stockEntry.quantity = Math.max(0, stockEntry.quantity - retItem.quantity);
+      }
+
+      // Record detailed movement
+      filteredMovements.push({
+        id: `mov_${Date.now()}_${retItem.itemId}_upd`,
+        itemId: retItem.itemId,
+        itemName: retItem.itemName,
+        date: updatedReturn.date,
+        type: 'transfer_out',
+        referenceNo: updatedReturn.returnNo,
+        branchId: updatedReturn.branchId,
+        branchName: groupData.branches.find(b => b.id === updatedReturn.branchId)?.name || 'الفرع الرئيسي',
+        quantityChange: -retItem.quantity,
+        unitName: retItem.unitName,
+        description: `تعديل مرتجع مشتريات رقم ${updatedReturn.returnNo} للمورد ${updatedReturn.supplierName}`
+      });
+    });
+
+    // Apply New Supplier Balance (Deduct new total, reducing liability)
+    if (updatedReturn.supplierId) {
+      const contactIdx = updatedContacts.findIndex(c => c.id === updatedReturn.supplierId);
+      if (contactIdx > -1) {
+        const contact = updatedContacts[contactIdx];
+        contact.currentBalance -= updatedReturn.total;
+      }
+    }
+
+    const updatedReturns = (groupData.purchaseReturns || []).map(r => r.id === returnId ? updatedReturn : r);
+
+    const currentData = {
+      ...groupData,
+      purchaseReturns: updatedReturns,
+      branchStock: updatedBranchStock,
+      movements: filteredMovements,
+      contacts: updatedContacts
+    };
+
+    const updatedLogs = appendAuditLog(
+      'تعديل مرتجع مشتريات',
+      `تم تعديل سند مرتجع المشتريات رقم ${updatedReturn.returnNo} بقيمة جديدة ${updatedReturn.total.toFixed(2)} شيكل للمورد "${updatedReturn.supplierName}".`,
+      'warning',
+      currentData
+    );
+
+    saveStateToDB({
+      ...currentData,
+      auditLogs: updatedLogs
+    });
+  };
+
+  // 4g. Delete Purchase Return
+  const handleDeletePurchaseReturn = (returnId: string, reason: string) => {
+    if (userRole === 'cashier') {
+      alert('🔒 عذراً! تم إلغاء العملية. غير مخوّل بحذف المرتجعات المعتمدة. يرجى مراجعة مدير النظام.');
+      return;
+    }
+
+    const oldReturn = (groupData.purchaseReturns || []).find(r => r.id === returnId);
+    if (!oldReturn) {
+      alert('سند المرتجع غير موجود!');
+      return;
+    }
+
+    const updatedBranchStock = [...groupData.branchStock];
+    const updatedMovements = [...groupData.movements];
+    const updatedContacts = [...groupData.contacts];
+
+    // Revert return stock effects (add back returned quantities)
+    oldReturn.items.forEach(retItem => {
+      const stockEntry = updatedBranchStock.find(
+        st => st.itemId === retItem.itemId && st.branchId === oldReturn.branchId
+      );
+      if (stockEntry) {
+        stockEntry.quantity += retItem.quantity;
+      } else {
+        updatedBranchStock.push({
+          itemId: retItem.itemId,
+          branchId: oldReturn.branchId,
+          quantity: retItem.quantity
+        });
+      }
+    });
+
+    // Revert supplier balance (add back return amount, increasing liability)
+    if (oldReturn.supplierId) {
+      const contactIdx = updatedContacts.findIndex(c => c.id === oldReturn.supplierId);
+      if (contactIdx > -1) {
+        const contact = updatedContacts[contactIdx];
+        contact.currentBalance += oldReturn.total;
+      }
+    }
+
+    const updatedReturns = (groupData.purchaseReturns || []).filter(r => r.id !== returnId);
+    const filteredMovements = updatedMovements.filter(m => m.referenceNo !== oldReturn.returnNo);
+
+    const currentData = {
+      ...groupData,
+      purchaseReturns: updatedReturns,
+      branchStock: updatedBranchStock,
+      movements: filteredMovements,
+      contacts: updatedContacts
+    };
+
+    const updatedLogs = appendAuditLog(
+      'حذف مرتجع مشتريات',
+      `تم إلغاء وحذف سند مرتجع المشتريات رقم ${oldReturn.returnNo} بقيمة ${oldReturn.total.toFixed(2)} شيكل للمورد "${oldReturn.supplierName}". السبب: ${reason || 'لم يذكر'}.`,
+      'critical',
+      currentData
+    );
+
+    saveStateToDB({
+      ...currentData,
+      auditLogs: updatedLogs
     });
   };
 
@@ -1329,6 +2150,10 @@ export default function App() {
   // 10. Multi-group Creator (مجموعة جديدة مستقلة تماماً ببياناتها)
   const handleCreateGroup = (e: React.FormEvent) => {
     e.preventDefault();
+    if (userRole === 'cashier') {
+      alert('🔒 عذراً! تم إلغاء العملية. لا تمتلك صلاحية مدير النظام لتأسيس مجموعة تجارية مستقلة جديدة.');
+      return;
+    }
     if (!newGroupName || !newGroupShopName) {
       alert('يرجى تعبئة اسم المجموعة واسم النشاط التجاري');
       return;
@@ -1389,6 +2214,10 @@ export default function App() {
     showInvoiceBranch: boolean,
     showInvoiceLogo: boolean
   ) => {
+    if (userRole === 'cashier') {
+      alert('🔒 عذراً! تم إلغاء العملية. لا تمتلك صلاحية مدير النظام لتعديل هوية المجموعة التجارية النشطة.');
+      return;
+    }
     const updatedGroups = groups.map(g => {
       if (g.id === activeGroupId) {
         return {
@@ -1414,8 +2243,40 @@ export default function App() {
     alert('تم تحديث إعدادات وهوية المحل التجاري للمجموعة بنجاح!');
   };
 
+  const handleUpdateUsers = (updatedUsers: UserAccount[]) => {
+    if (userRole !== 'admin') {
+      alert('🔒 عذراً! صلاحية إدارة حسابات الموظفين مقتصرة فقط على "مدير النظام".');
+      return;
+    }
+    const updatedData = {
+      ...groupData,
+      users: updatedUsers
+    };
+    setGroupData(updatedData);
+    saveGroupData(activeGroupId, updatedData);
+    
+    // Log user management change
+    const logEntry: AuditLogEntry = {
+      id: `log_user_mgmt_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action: 'إدارة المستخدمين والصلاحيات',
+      operator: 'أحمد المحترف (مدير النظام)',
+      details: `تحديث قائمة حسابات الموظفين وصلاحياتهم الفعالة (العدد الحالي: ${updatedUsers.length} حسابات)`,
+      severity: 'warning'
+    };
+    
+    const logs = [logEntry, ...(groupData.auditLogs || [])];
+    const finalData = { ...updatedData, auditLogs: logs };
+    setGroupData(finalData);
+    saveGroupData(activeGroupId, finalData);
+  };
+
   // 12. Backup Restore Operations
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (userRole === 'cashier') {
+      alert('🔒 عذراً! استيراد النسخ الاحتياطية وتغيير قواعد البيانات متاح فقط لمدير النظام (Admin).');
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -1434,6 +2295,10 @@ export default function App() {
   };
 
   const handleDownloadBackup = () => {
+    if (userRole === 'cashier') {
+      alert('🔒 عذراً! تصدير النسخ الاحتياطية مسموح فقط لمدير النظام (Admin) لحماية سرية البيانات.');
+      return;
+    }
     const backupStr = exportAllData();
     const blob = new Blob([backupStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1516,6 +2381,372 @@ export default function App() {
       totalQty
     };
   }).filter(item => item.totalQty <= item.minStockAlert);
+  
+  const filteredAuditLogs = (groupData.auditLogs || []).filter(log => {
+    if (logSearchQuery) {
+      const q = logSearchQuery.toLowerCase();
+      const matchesText = (log.action || '').toLowerCase().includes(q) ||
+                          (log.details || '').toLowerCase().includes(q) ||
+                          (log.operator || '').toLowerCase().includes(q);
+      if (!matchesText) return false;
+    }
+    if (logOperatorFilter && log.operator !== logOperatorFilter) {
+      return false;
+    }
+    if (logActionFilter && log.action !== logActionFilter) {
+      return false;
+    }
+    if (logSeverityFilter && log.severity !== logSeverityFilter) {
+      return false;
+    }
+    return true;
+  });
+
+  const uniqueOperators = Array.from(new Set((groupData.auditLogs || []).map(log => log.operator).filter(Boolean)));
+  const uniqueActions = Array.from(new Set((groupData.auditLogs || []).map(log => log.action).filter(Boolean)));
+
+  const renderLockedCard = (title: string, description: string) => (
+    <div className="rounded-2xl glass-panel-card p-6 border border-amber-500/10 dark:border-amber-500/5 shadow-sm flex flex-col items-center justify-center text-center space-y-3 min-h-[160px] bg-slate-500/5 relative overflow-hidden">
+      <div className="absolute inset-0 bg-white/40 dark:bg-slate-950/40 backdrop-blur-[1px] pointer-events-none" />
+      <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500 z-10">
+        <Lock size={22} />
+      </div>
+      <div className="space-y-1 z-10 max-w-md">
+        <h4 className="font-extrabold text-sm text-slate-800 dark:text-slate-200">{title}</h4>
+        <p className="text-xs text-slate-500 leading-relaxed">{description}</p>
+      </div>
+    </div>
+  );
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4 text-right" dir="rtl">
+        <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden p-8 space-y-6 animate-in fade-in zoom-in-95 duration-300">
+          
+          <div className="text-center space-y-2">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 text-emerald-500 mx-auto flex items-center justify-center shadow-inner border border-emerald-500/20">
+              <Store size={32} />
+            </div>
+            <h2 className="text-xl font-black text-slate-900 dark:text-white">بوابة الدخول الموحدة</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">نظام غزة كاش الذكي لإدارة المبيعات والمستودعات ERP</p>
+          </div>
+
+          <form onSubmit={handleLoginSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <label className="text-xs font-extrabold text-slate-500 dark:text-slate-400 block">اختر نوع الصلاحية (الدور الوظيفي):</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserRole('admin');
+                    setLoginError('');
+                  }}
+                  className={`p-4 rounded-xl border text-right transition flex flex-col items-start gap-2 cursor-pointer w-full ${
+                    userRole === 'admin'
+                      ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-500/10 text-slate-900 dark:text-white'
+                      : 'border-slate-200 dark:border-slate-800 bg-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-500/5'
+                  }`}
+                >
+                  <div className={`p-1.5 rounded-lg ${userRole === 'admin' ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                    <ShieldCheck size={18} />
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-black block">مدير النظام</span>
+                    <span className="text-[9px] text-slate-400 leading-tight block">كامل الصلاحيات</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserRole('cashier');
+                    setLoginError('');
+                  }}
+                  className={`p-4 rounded-xl border text-right transition flex flex-col items-start gap-2 cursor-pointer w-full ${
+                    userRole === 'cashier'
+                      ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-500/10 text-slate-900 dark:text-white'
+                      : 'border-slate-200 dark:border-slate-800 bg-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-500/5'
+                  }`}
+                >
+                  <div className={`p-1.5 rounded-lg ${userRole === 'cashier' ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                    <Users size={18} />
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-black block">كاشير مبيعات</span>
+                    <span className="text-[9px] text-slate-400 leading-tight block">بيع مباشر وفواتير</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-extrabold text-slate-500 dark:text-slate-400 block flex items-center justify-between">
+                <span>رمز الدخول السري:</span>
+                <span className="text-[10px] text-slate-400 font-normal">الافتراضي: <code className="font-mono bg-slate-100 dark:bg-slate-850 px-1 rounded font-bold">{userRole === 'admin' ? 'admin' : '1234'}</code></span>
+              </label>
+              <div className="relative">
+                <Key size={14} className="absolute right-3 top-3.5 text-slate-400" />
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="أدخل الرمز السري هنا..."
+                  className="w-full p-2.5 pr-9 rounded-xl glass-input text-xs text-slate-950 dark:text-white font-mono text-center tracking-widest"
+                  required
+                />
+              </div>
+            </div>
+
+            {loginError && (
+              <div className="p-2.5 rounded-xl bg-red-500/10 text-red-500 text-[11px] font-bold border border-red-500/20 leading-relaxed">
+                ⚠️ {loginError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold shadow-md shadow-emerald-500/20 transition duration-200 cursor-pointer flex items-center justify-center gap-2"
+            >
+              دخول المنظومة السحابية
+            </button>
+          </form>
+
+          <div className="text-center text-[10px] text-slate-400 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <span>جميع الحقوق محفوظة © {new Date().getFullYear()}</span>
+            <button
+              type="button"
+              onClick={() => {
+                const nextTheme = themeMode === 'light' ? 'dark' : 'light';
+                setThemeState(nextTheme);
+                setTheme(nextTheme);
+                applyThemeClass(nextTheme);
+              }}
+              className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-500 cursor-pointer"
+            >
+              {themeMode === 'light' ? <Moon size={12} /> : <Sun size={12} />}
+            </button>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  if (!isGroupSelected) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4 text-right" dir="rtl">
+        <div className="max-w-2xl w-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden p-6 md:p-8 space-y-6 animate-in fade-in zoom-in-95 duration-300">
+          
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-4">
+            <div className="space-y-1">
+              <span className="text-[10px] font-extrabold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">الخطوة الثانية والأخيرة</span>
+              <h2 className="text-lg font-black text-slate-900 dark:text-white">اختر المجموعة التجارية النشطة</h2>
+              <p className="text-xs text-slate-500">يرجى اختيار المجموعة التجارية أو المعرض الذي ترغب في تفعيل دفاتر حساباته الآن</p>
+            </div>
+            
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-xl bg-red-500/5 hover:bg-red-500/10 text-red-500 border border-red-500/10 transition text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              title="تسجيل الخروج والرجوع"
+            >
+              <LogOut size={14} />
+              <span>خروج</span>
+            </button>
+          </div>
+
+          {!showCreateGroupOnOnboarding ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {groups.map((g) => {
+                  const isFoods = g.id === 'group_foods';
+                  return (
+                    <div
+                      key={g.id}
+                      onClick={() => handleSelectGroupOnboarding(g.id)}
+                      className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30 hover:border-emerald-500 dark:hover:border-emerald-500/60 hover:bg-slate-50 dark:hover:bg-slate-950/80 cursor-pointer transition-all duration-300 flex flex-col justify-between group relative overflow-hidden text-right"
+                    >
+                      <div className="absolute top-0 right-0 w-1.5 h-full bg-slate-300 dark:bg-slate-800 group-hover:bg-emerald-500 transition-colors" />
+                      
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2.5 rounded-xl ${isFoods ? 'bg-emerald-500/10 text-emerald-500' : 'bg-blue-500/10 text-blue-500'}`}>
+                            <Store size={22} />
+                          </div>
+                          <div>
+                            <h3 className="font-extrabold text-sm text-slate-800 dark:text-slate-100 group-hover:text-emerald-500 dark:group-hover:text-emerald-400 transition-colors">{g.name}</h3>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500">المعرف: {g.id}</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1 bg-slate-100/50 dark:bg-slate-900/50 p-3 rounded-xl text-[11px] text-slate-500 dark:text-slate-400">
+                          <div>📍 {g.settings?.address || 'غير محدد'}</div>
+                          <div>📞 {g.settings?.phone || 'غير محدد'}</div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-end text-xs font-extrabold text-emerald-500 gap-1 opacity-80 group-hover:opacity-100 transition">
+                        <span>دخول لوحة التحكم</span>
+                        <ArrowLeft size={12} className="group-hover:-translate-x-1 transition-transform" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {userRole === 'admin' && (
+                <div className="pt-2">
+                  <button
+                    onClick={() => setShowCreateGroupOnOnboarding(true)}
+                    className="w-full py-3.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500/60 text-slate-600 dark:text-slate-300 hover:text-emerald-500 dark:hover:text-emerald-400 text-xs font-extrabold flex items-center justify-center gap-2 transition cursor-pointer"
+                  >
+                    <Plus size={16} />
+                    <span>تأسيس مجموعة تجارية أو فرع مستقل جديد</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newGroupName || !newGroupShopName) {
+                  alert('يرجى تعبئة اسم المجموعة واسم النشاط التجاري');
+                  return;
+                }
+                const newGroupId = `group_custom_${Date.now()}`;
+                const newGroup: Group = {
+                  id: newGroupId,
+                  name: newGroupName,
+                  settings: {
+                    name: newGroupShopName,
+                    address: newGroupAddress || 'غزة',
+                    phone: newGroupPhone || 'غير مدرج',
+                    logoText: newGroupShopName.substring(0, 12),
+                    logoColor: 'emerald'
+                  }
+                };
+
+                const updatedGroups = [...groups, newGroup];
+                setGroups(updatedGroups);
+                saveGroups(updatedGroups);
+
+                const emptyData: GroupData = {
+                  items: [],
+                  branches: [{ id: `branch_${newGroupId}_main`, name: 'المستودع الرئيسي الافتراضي', location: newGroupAddress || 'غزة' }],
+                  branchStock: [],
+                  contacts: [],
+                  sales: [],
+                  purchases: [],
+                  returns: [],
+                  quotations: [],
+                  transfers: [],
+                  movements: []
+                };
+
+                saveGroupData(newGroupId, emptyData);
+                
+                handleSelectGroupOnboarding(newGroupId);
+
+                setNewGroupName('');
+                setNewGroupShopName('');
+                setNewGroupAddress('');
+                setNewGroupPhone('');
+                setShowCreateGroupOnOnboarding(false);
+                alert('تم تأسيس وتفعيل المجموعة التجارية المستقلة الجديدة بنجاح!');
+              }}
+              className="space-y-4 bg-slate-50 dark:bg-slate-950/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 animate-in slide-in-from-bottom-3 duration-200 text-right"
+            >
+              <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-200">تأسيس مجموعة تجارية جديدة</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1 text-right">
+                  <label className="text-[11px] font-bold text-slate-500">اسم المجموعة التجارية</label>
+                  <input
+                    type="text"
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                    placeholder="مثال: مجموعة الهدى للملبوسات"
+                    className="w-full p-2.5 rounded-xl glass-input text-xs"
+                    required
+                  />
+                </div>
+                <div className="space-y-1 text-right">
+                  <label className="text-[11px] font-bold text-slate-500">اسم المعرض الرئيسي</label>
+                  <input
+                    type="text"
+                    value={newGroupShopName}
+                    onChange={(e) => setNewGroupShopName(e.target.value)}
+                    placeholder="مثال: معرض الهدى للملابس الرجالية"
+                    className="w-full p-2.5 rounded-xl glass-input text-xs"
+                    required
+                  />
+                </div>
+                <div className="space-y-1 text-right">
+                  <label className="text-[11px] font-bold text-slate-500">العنوان الجغرافي</label>
+                  <input
+                    type="text"
+                    value={newGroupAddress}
+                    onChange={(e) => setNewGroupAddress(e.target.value)}
+                    placeholder="مثال: غزة، الرمال، شارع الجلاء"
+                    className="w-full p-2.5 rounded-xl glass-input text-xs"
+                  />
+                </div>
+                <div className="space-y-1 text-right">
+                  <label className="text-[11px] font-bold text-slate-500">رقم الهاتف / الجوال</label>
+                  <input
+                    type="text"
+                    value={newGroupPhone}
+                    onChange={(e) => setNewGroupPhone(e.target.value)}
+                    placeholder="مثال: 059-9000000"
+                    className="w-full p-2.5 rounded-xl glass-input text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateGroupOnOnboarding(false);
+                    setNewGroupName('');
+                    setNewGroupShopName('');
+                    setNewGroupAddress('');
+                    setNewGroupPhone('');
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-extrabold text-xs transition cursor-pointer"
+                >
+                  إلغاء التأسيس
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs transition shadow-md cursor-pointer"
+                >
+                  حفظ وتفعيل المجموعة الجديدة
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="text-center text-[10px] text-slate-400 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <span>تسجيل الدخول الحالي كـ: <span className="font-extrabold text-slate-800 dark:text-white">{userRole === 'admin' ? 'مدير النظام (Admin)' : 'كاشير مبيعات (Cashier)'}</span></span>
+            <button
+              type="button"
+              onClick={() => {
+                const nextTheme = themeMode === 'light' ? 'dark' : 'light';
+                setThemeState(nextTheme);
+                setTheme(nextTheme);
+                applyThemeClass(nextTheme);
+              }}
+              className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-500 cursor-pointer"
+            >
+              {themeMode === 'light' ? <Moon size={12} /> : <Sun size={12} />}
+            </button>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300">
@@ -1536,12 +2767,12 @@ export default function App() {
             >
               <Menu size={18} />
             </button>
-
+ 
             <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center overflow-hidden shrink-0 shadow-md">
               <img src={shopMeta.logoUrl || defaultLogo} alt="شعار" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-right">
                 <h1 className="font-extrabold text-base text-slate-900 dark:text-white leading-tight">نظام غزة كاش الذكي</h1>
                 <span className="bg-emerald-500 text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded">v1.1</span>
               </div>
@@ -1550,9 +2781,29 @@ export default function App() {
               </p>
             </div>
           </div>
-
+ 
           {/* Quick Active Group Selector & Currency Selector */}
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+            {/* User Role Badge */}
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-bold text-[10px] sm:text-xs shadow-inner select-none transition-all duration-200 ${
+              userRole === 'admin' 
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
+                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+            }`}>
+              <ShieldCheck size={14} className={userRole === 'admin' ? 'text-emerald-500 animate-pulse' : 'text-amber-500'} />
+              <span>{userRole === 'admin' ? 'مدير النظام (Admin)' : 'كاشير مبيعات (Cashier)'}</span>
+            </div>
+
+            {/* Logout Button */}
+            <button
+              onClick={handleLogout}
+              className="p-2 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 transition text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              title="تسجيل الخروج والرجوع لبوابة الدخول"
+            >
+              <LogOut size={14} />
+              <span className="hidden sm:inline">تسجيل خروج</span>
+            </button>
+ 
             <div className="flex items-center gap-1 bg-slate-500/5 dark:bg-slate-950/50 p-1.5 rounded-xl border border-white/10">
               <span className="text-[10px] font-bold text-slate-500 px-2">المجموعة النشطة:</span>
               <select
@@ -1714,6 +2965,20 @@ export default function App() {
                 className={`w-full text-right p-3 rounded-xl text-xs font-bold transition flex items-center gap-2.5 cursor-pointer ${activeTab === 'transactions' ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/10' : 'hover:bg-slate-500/5 text-slate-600 dark:text-slate-300'}`}
               >
                 <ShoppingBag size={16} /> الشراء، المرتجعات وعروض الأسعار
+              </button>
+
+              <button
+                onClick={() => setActiveTab('sales-management')}
+                className={`w-full text-right p-3 rounded-xl text-xs font-bold transition flex items-center gap-2.5 cursor-pointer ${activeTab === 'sales-management' ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/10' : 'hover:bg-slate-500/5 text-slate-600 dark:text-slate-300'}`}
+              >
+                <Receipt size={16} /> إدارة المبيعات ومرتجع المبيعات 📊
+              </button>
+
+              <button
+                onClick={() => setActiveTab('purchases-management')}
+                className={`w-full text-right p-3 rounded-xl text-xs font-bold transition flex items-center gap-2.5 cursor-pointer ${activeTab === 'purchases-management' ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/10' : 'hover:bg-slate-500/5 text-slate-600 dark:text-slate-300'}`}
+              >
+                <ShoppingBag size={16} /> إدارة المشتريات ومرتجع الشراء 🛒
               </button>
 
               <p className="text-[10px] font-bold text-slate-400 px-3 pt-4 pb-2 uppercase tracking-wider">الحسابات والتقارير</p>
@@ -2044,9 +3309,10 @@ export default function App() {
               activeBranchId="branch_main"
               onSaveSale={handleSaveSale}
               onPrintInvoice={(sale) => {
-                const saleCurrency = currencies.find(c => c.id === sale.currencyId) || { symbol: '₪' };
-                alert(`تم حفظ واعتماد الفاتورة بنجاح برقم: ${sale.invoiceNo}\nصافي قيمة الفاتورة: ${sale.total.toFixed(2)} ${saleCurrency.symbol}`);
-                window.print();
+                setLastPrintedSale(sale);
+                setTimeout(() => {
+                  window.print();
+                }, 150);
               }}
               shopName={shopMeta.name}
               activeCurrency={activeCurrency}
@@ -2094,6 +3360,39 @@ export default function App() {
             />
           )}
 
+          {/* D2. TAB: SALES & RETURNS MANAGEMENT (إدارة المبيعات ومرتجع المبيعات وفلاتر البحث والتعديل) */}
+          {activeTab === 'sales-management' && (
+            <SalesManagement
+              sales={groupData.sales}
+              returns={groupData.returns}
+              contacts={groupData.contacts}
+              branches={groupData.branches}
+              items={groupData.items}
+              userRole={userRole}
+              onUpdateSale={handleUpdateSale}
+              onUpdateReturn={handleUpdateReturn}
+              onDeleteSale={handleDeleteInvoice}
+              onDeleteReturn={handleDeleteReturn}
+            />
+          )}
+
+          {/* D3. TAB: PURCHASES & RETURNS MANAGEMENT (إدارة المشتريات والتوريد ومرتجع المشتريات والبحث والتعديل) */}
+          {activeTab === 'purchases-management' && (
+            <PurchasesManagement
+              purchases={groupData.purchases}
+              purchaseReturns={groupData.purchaseReturns || []}
+              contacts={groupData.contacts}
+              branches={groupData.branches}
+              items={groupData.items}
+              userRole={userRole}
+              onUpdatePurchase={handleUpdatePurchase}
+              onUpdatePurchaseReturn={handleUpdatePurchaseReturn}
+              onDeletePurchase={handleDeleteInvoice}
+              onDeletePurchaseReturn={handleDeletePurchaseReturn}
+              onSavePurchaseReturn={handleSavePurchaseReturn}
+            />
+          )}
+
           {/* E. TAB: CONTACTS (العملاء والموردين وكشوف الحسابات المعتمدة والسندات المالية) */}
           {activeTab === 'contacts' && (
             <Contacts
@@ -2119,7 +3418,7 @@ export default function App() {
               activeCurrency={activeCurrency}
               currencies={currencies}
               initialTab={reportsSubTab}
-              logoUrl={shopMeta.logoUrl || defaultLogo}
+              logoUrl={base64Logo || defaultLogo}
               returns={groupData.returns}
               branchStock={groupData.branchStock}
               movements={groupData.movements}
@@ -2133,11 +3432,72 @@ export default function App() {
           {activeTab === 'settings' && (
             <div className="space-y-6">
               
-              {/* Settings Group Meta */}
+              {/* Role & Permissions Settings Card */}
               <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
-                <h3 className="font-extrabold text-md text-slate-950 dark:text-white flex items-center gap-1">
-                  <Settings size={18} className="text-emerald-500" /> إعدادات الهوية للمجموعة التجارية النشطة
+                <h3 className="font-extrabold text-md text-slate-950 dark:text-white flex items-center gap-1.5">
+                  <ShieldCheck size={18} className="text-emerald-500 animate-pulse" /> نظام الأدوار وصلاحيات المستخدمين (User Roles & Permissions)
                 </h3>
+                <p className="text-xs text-slate-500">
+                  حدد دور المستخدم الحالي للمنظومة على هذا المتصفح. تذكر أن دور "الكاشير" مقيد الصلاحيات لحماية بياناتك المالية من التلاعب أو المسح العشوائي.
+                </p>
+                
+                <div className="flex flex-wrap gap-4 items-center bg-slate-500/5 p-4 rounded-xl border border-slate-200/40 dark:border-slate-800/40 justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300">دور المستخدم النشط:</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setUserRole('admin')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                          userRole === 'admin'
+                            ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
+                            : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-100'
+                        }`}
+                      >
+                        <UserCheck size={14} /> مدير النظام (Admin)
+                      </button>
+                      <button
+                        onClick={() => setUserRole('cashier')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                          userRole === 'cashier'
+                            ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20'
+                            : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-100'
+                        }`}
+                      >
+                        <Lock size={14} /> كاشير مبيعات (Cashier)
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                    {userRole === 'admin' ? (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">✓ لديك صلاحيات كاملة لإدارة الأصناف، مسح الفواتير، تهيئة وتصفير النظام وتصدير قواعد البيانات.</span>
+                    ) : (
+                      <span className="text-amber-600 dark:text-amber-400 font-extrabold">🔒 تم تقييد حسابك: لا يمكنك مسح الفواتير، تصفير قواعد البيانات، تصدير النسخ الاحتياطية أو تعديل بيانات المجموعات التجارية.</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Users & Passwords Control Panel */}
+              <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md">
+                <UsersManagement
+                  users={groupData.users || []}
+                  currentUserRole={userRole}
+                  onUpdateUsers={handleUpdateUsers}
+                />
+              </div>
+
+              {/* Settings Group Meta */}
+              {userRole === 'cashier' ? (
+                renderLockedCard(
+                  "تعديل هوية وإعدادات المجموعة التجارية النشطة",
+                  "هذه الإعدادات حساسة وتتحكم بالاسم والشعار والعناوين المطبوعة على فواتير وسندات المحل. يرجى تبديل الدور إلى مدير النظام للتحكم بها."
+                )
+              ) : (
+                <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+                  <h3 className="font-extrabold text-md text-slate-950 dark:text-white flex items-center gap-1">
+                    <Settings size={18} className="text-emerald-500" /> إعدادات الهوية للمجموعة التجارية النشطة
+                  </h3>
                 <p className="text-xs text-slate-500">
                   حدد هنا تفاصيل الاسم التجاري المطبوع في رأس الفاتورة وعنوان الفروع ورقم الهاتف ليظهر في سندات العملاء والمبيعات للمجموعة.
                 </p>
@@ -2326,12 +3686,19 @@ export default function App() {
                   </div>
                 </form>
               </div>
+              )}
 
               {/* Group Manager (إضافة مجموعة مستقلة) */}
-              <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
-                <h3 className="font-extrabold text-md text-slate-950 dark:text-white flex items-center gap-1">
-                  <FolderPlus size={18} className="text-emerald-500" /> تأسيس مجموعة أعمال تجارية مستقلة جديدة
-                </h3>
+              {userRole === 'cashier' ? (
+                renderLockedCard(
+                  "تأسيس مجموعة أعمال تجارية مستقلة جديدة",
+                  "إضافة مجموعات تجارية جديدة أو التعديل عليها صلاحية خاصة لمدير النظام لتفادي إنشاء فروع أو مجموعات وهمية."
+                )
+              ) : (
+                <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+                  <h3 className="font-extrabold text-md text-slate-950 dark:text-white flex items-center gap-1">
+                    <FolderPlus size={18} className="text-emerald-500" /> تأسيس مجموعة أعمال تجارية مستقلة جديدة
+                  </h3>
                 <p className="text-xs text-slate-500">
                   يتيح لك نظام غزة كاش العمل على عدة مجموعات مستقلة؛ حيث تمتلك كل مجموعة سجل أصناف، عملاء، فروع، فواتير ومستودعات معزولة تماماً في مأمن من التداخل.
                 </p>
@@ -2393,12 +3760,19 @@ export default function App() {
                   </button>
                 </form>
               </div>
+              )}
 
               {/* Data backups and security rules */}
-              <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
-                <h3 className="font-extrabold text-md text-slate-950 dark:text-white flex items-center gap-1">
-                  <Share2 size={18} className="text-emerald-500" /> الأمان والنسخ الاحتياطي لقواعد البيانات
-                </h3>
+              {userRole === 'cashier' ? (
+                renderLockedCard(
+                  "الأمان والنسخ الاحتياطي لقواعد البيانات",
+                  "تصدير أو استيراد البيانات مسموح فقط لمدير النظام (Admin) للحفاظ على سرية الحسابات والبيانات الحساسة."
+                )
+              ) : (
+                <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+                  <h3 className="font-extrabold text-md text-slate-950 dark:text-white flex items-center gap-1">
+                    <Share2 size={18} className="text-emerald-500" /> الأمان والنسخ الاحتياطي لقواعد البيانات
+                  </h3>
                 <p className="text-xs text-slate-500">
                   لحماية أعمالك من الضياع، يمكنك سحب نسخة مبرمجة شاملة لكافة مجموعاتك ونقاط البيع الخاصة بك كملف مشفر، واستعادتها على أي جهاز كمبيوتر آخر يعمل بنظام غزة كاش.
                 </p>
@@ -2425,12 +3799,19 @@ export default function App() {
                   </div>
                 </div>
               </div>
+              )}
 
               {/* Data Wiping & Factory Reset Panel */}
-              <div className="rounded-2xl glass-panel-card p-5 border border-red-500/20 dark:border-red-500/10 shadow-md space-y-4">
-                <h3 className="font-extrabold text-md text-red-600 dark:text-red-400 flex items-center gap-1.5">
-                  <RotateCcw size={18} className="text-red-500" /> تصفير البيانات وإعادة تعيين النظام
-                </h3>
+              {userRole === 'cashier' ? (
+                renderLockedCard(
+                  "تصفير البيانات وإعادة تعيين النظام",
+                  "أدوات تصفير الحسابات والمسح الشامل تم تقييدها بالكامل لحماية النشاط المالي من الضياع أو التخريب المتعمد."
+                )
+              ) : (
+                <div className="rounded-2xl glass-panel-card p-5 border border-red-500/20 dark:border-red-500/10 shadow-md space-y-4">
+                  <h3 className="font-extrabold text-md text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                    <RotateCcw size={18} className="text-red-500" /> تصفير البيانات وإعادة تعيين النظام
+                  </h3>
                 <p className="text-xs text-slate-500">
                   لوحة تحكم لإفراغ وتطهير قواعد البيانات عند بدء دورة مالية جديدة، أو العودة للحالة التجريبية لغرض التدريب، أو مسح المنظومة بالكامل.
                 </p>
@@ -2485,15 +3866,22 @@ export default function App() {
                   </div>
                 </div>
               </div>
+              )}
 
               {/* --- 1. DANGEROUS OPERATIONS / ADMINISTRATION CONTROL PANEL --- */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
                 {/* Manual Stock Adjustment Tool */}
-                <div className="rounded-2xl glass-panel-card p-5 border border-amber-500/10 dark:border-amber-500/5 shadow-md space-y-4">
-                  <h3 className="font-extrabold text-md text-amber-600 dark:text-amber-400 flex items-center gap-2">
-                    <RefreshCw size={18} className="text-amber-500" /> تعديل رصيد صنف يدوياً (تسوية جرد)
-                  </h3>
+                {userRole === 'cashier' ? (
+                  renderLockedCard(
+                    "تعديل رصيد صنف يدوياً (تسوية جرد)",
+                    "تسويات المخزون اليدوية تؤثر بشكل مباشر على الأرباح والتقارير المالية، لذلك تم قصرها على مدير النظام."
+                  )
+                ) : (
+                  <div className="rounded-2xl glass-panel-card p-5 border border-amber-500/10 dark:border-amber-500/5 shadow-md space-y-4">
+                    <h3 className="font-extrabold text-md text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                      <RefreshCw size={18} className="text-amber-500" /> تعديل رصيد صنف يدوياً (تسوية جرد)
+                    </h3>
                   <p className="text-xs text-slate-500">
                     أداة إدارية لتعديل الكمية المتوفرة لصنف معين في مستودع محدد مباشرة، دون الحاجة لعملية شراء أو بيع. سيتم قيد هذه العملية في كشف حركة الصنف وسجل الأمان.
                   </p>
@@ -2577,12 +3965,19 @@ export default function App() {
                     </button>
                   </form>
                 </div>
+                )}
 
                 {/* Permanent Invoice Deletion Tool */}
-                <div className="rounded-2xl glass-panel-card p-5 border border-red-500/10 dark:border-red-500/5 shadow-md space-y-4">
-                  <h3 className="font-extrabold text-md text-red-600 dark:text-red-400 flex items-center gap-2">
-                    <Trash size={18} className="text-red-500 animate-pulse" /> مسح وإلغاء فاتورة معتمدة (مبيعات / مشتريات)
-                  </h3>
+                {userRole === 'cashier' ? (
+                  renderLockedCard(
+                    "مسح وإلغاء فاتورة معتمدة (مبيعات / مشتريات)",
+                    "إلغاء الفواتير المسجلة يؤدي لتغيير الذمم والكميات تلقائياً؛ هذه الصلاحية مقفلة للكاشير منعاً للتلاعب بالفواتير المصدرة."
+                  )
+                ) : (
+                  <div className="rounded-2xl glass-panel-card p-5 border border-red-500/10 dark:border-red-500/5 shadow-md space-y-4">
+                    <h3 className="font-extrabold text-md text-red-600 dark:text-red-400 flex items-center gap-2">
+                      <Trash size={18} className="text-red-500 animate-pulse" /> مسح وإلغاء فاتورة معتمدة (مبيعات / مشتريات)
+                    </h3>
                   <p className="text-xs text-slate-500">
                     أداة حساسة جداً لحذف الفواتير الخاطئة تماماً. ستقوم الأداة بـ: حذف الفاتورة، إرجاع كميات الأصناف للمخازن تلقائياً، تسوية حسابات العملاء/الموردين وحذف قيود الحركة.
                   </p>
@@ -2598,11 +3993,17 @@ export default function App() {
                         alert('يرجى كتابة سبب الحذف لتوثيقه في سجل الأمان والمساءلة!');
                         return;
                       }
-                      if (window.confirm(`تحذير أمان حرج!\nهل أنت متأكد تماماً من رغبتك في مسح الفاتورة رقم (${delInvoiceNo})؟\nسيتم عكس كميات المخازن وتصفية أرصدة الذمم المالية على الفور.`)) {
-                        handleDeleteInvoice(delInvoiceNo, delReason);
-                        setDelInvoiceNo('');
-                        setDelReason('');
-                      }
+                      setConfirmModal({
+                        isOpen: true,
+                        title: 'تحذير أمان حرج',
+                        message: `هل أنت متأكد تماماً من رغبتك في مسح الفاتورة رقم (${delInvoiceNo})؟\nسيتم عكس كميات المخازن وتصفية أرصدة الذمم المالية على الفور.`,
+                        isDanger: true,
+                        onConfirm: () => {
+                          handleDeleteInvoice(delInvoiceNo, delReason);
+                          setDelInvoiceNo('');
+                          setDelReason('');
+                        }
+                      });
                     }}
                     className="space-y-3"
                   >
@@ -2652,6 +4053,7 @@ export default function App() {
                     </button>
                   </form>
                 </div>
+                )}
 
               </div>
 
@@ -2676,15 +4078,96 @@ export default function App() {
                 </div>
 
                 {/* Filter and Search */}
-                <div className="relative">
-                  <Search size={14} className="absolute right-3 top-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    value={logSearchQuery}
-                    onChange={(e) => setLogSearchQuery(e.target.value)}
-                    placeholder="ابحث في سجل العمليات عن صنف، رقم فاتورة، إجراء أو موظف..."
-                    className="w-full p-2.5 pr-9 rounded-xl glass-input text-xs text-slate-950 dark:text-white"
-                  />
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-slate-100/50 dark:bg-slate-900/40 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+                    
+                    {/* Interactive Text Search */}
+                    <div className="md:col-span-4 relative">
+                      <label className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 block mb-1">ابحث بالاسم أو التفاصيل</label>
+                      <div className="relative">
+                        <Search size={14} className="absolute right-3 top-3 text-slate-400" />
+                        <input
+                          type="text"
+                          value={logSearchQuery}
+                          onChange={(e) => setLogSearchQuery(e.target.value)}
+                          placeholder="ابحث عن صنف، رقم فاتورة، موظف..."
+                          className="w-full p-2 pr-9 rounded-xl glass-input text-xs text-slate-950 dark:text-white"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Filter by Operator */}
+                    <div className="md:col-span-3">
+                      <label className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 block mb-1 flex items-center gap-1">
+                        <UserCheck size={11} className="text-emerald-500" /> الموظف المسؤول
+                      </label>
+                      <select
+                        value={logOperatorFilter}
+                        onChange={(e) => setLogOperatorFilter(e.target.value)}
+                        className="w-full p-2 rounded-xl glass-input text-xs text-slate-950 dark:text-white cursor-pointer"
+                      >
+                        <option value="">كافة الموظفين والمستخدمين</option>
+                        {uniqueOperators.map(op => (
+                          <option key={op} value={op}>{op}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Filter by Action */}
+                    <div className="md:col-span-3">
+                      <label className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 block mb-1 flex items-center gap-1">
+                        <SlidersHorizontal size={11} className="text-emerald-500" /> نوع الإجراء (العملية)
+                      </label>
+                      <select
+                        value={logActionFilter}
+                        onChange={(e) => setLogActionFilter(e.target.value)}
+                        className="w-full p-2 rounded-xl glass-input text-xs text-slate-950 dark:text-white cursor-pointer"
+                      >
+                        <option value="">كافة أنواع الإجراءات والعمليات</option>
+                        {uniqueActions.map(action => (
+                          <option key={action} value={action}>{action}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Filter by Severity */}
+                    <div className="md:col-span-2">
+                      <label className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 block mb-1 flex items-center gap-1">
+                        <Filter size={11} className="text-emerald-500" /> مستوى الخطورة
+                      </label>
+                      <select
+                        value={logSeverityFilter}
+                        onChange={(e) => setLogSeverityFilter(e.target.value)}
+                        className="w-full p-2 rounded-xl glass-input text-xs text-slate-950 dark:text-white cursor-pointer"
+                      >
+                        <option value="">كافة المستويات</option>
+                        <option value="info">معلومة (أخضر)</option>
+                        <option value="warning">تنبيه (أصفر)</option>
+                        <option value="critical">حرج (أحمر)</option>
+                      </select>
+                    </div>
+
+                  </div>
+
+                  {/* Active Filters Stats & Reset */}
+                  <div className="flex items-center justify-between text-[11px] px-1 bg-slate-500/5 py-1.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                    <div className="text-slate-500 dark:text-slate-400">
+                      أظهرت النتائج <span className="font-extrabold text-slate-800 dark:text-white">{filteredAuditLogs.length}</span> عملية من أصل <span className="font-extrabold text-slate-800 dark:text-white">{(groupData.auditLogs || []).length}</span> مسجلة في سجل الأمان.
+                    </div>
+                    {(logSearchQuery || logOperatorFilter || logActionFilter || logSeverityFilter) && (
+                      <button
+                        onClick={() => {
+                          setLogSearchQuery('');
+                          setLogOperatorFilter('');
+                          setLogActionFilter('');
+                          setLogSeverityFilter('');
+                        }}
+                        className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 font-extrabold hover:underline flex items-center gap-1 cursor-pointer transition"
+                      >
+                        إزالة التصفية الفعّالة ×
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Logs Table */}
@@ -2696,33 +4179,18 @@ export default function App() {
                         <th className="p-3">الإجراء والمستوى</th>
                         <th className="p-3">المسؤول</th>
                         <th className="p-3">التفاصيل الكاملة للعملية</th>
+                        <th className="p-3 text-center">الإجراءات</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {((groupData.auditLogs || []).filter(log => {
-                        if (!logSearchQuery) return true;
-                        const q = logSearchQuery.toLowerCase();
-                        return (
-                          log.action.toLowerCase().includes(q) ||
-                          log.details.toLowerCase().includes(q) ||
-                          log.operator.toLowerCase().includes(q)
-                        );
-                      })).length === 0 ? (
+                      {filteredAuditLogs.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="p-8 text-center text-slate-400 text-xs">
+                          <td colSpan={5} className="p-8 text-center text-slate-400 text-xs">
                             لا توجد أي سجلات نشاط تطابق شروط البحث الحالية.
                           </td>
                         </tr>
                       ) : (
-                        ((groupData.auditLogs || []).filter(log => {
-                          if (!logSearchQuery) return true;
-                          const q = logSearchQuery.toLowerCase();
-                          return (
-                            log.action.toLowerCase().includes(q) ||
-                            log.details.toLowerCase().includes(q) ||
-                            log.operator.toLowerCase().includes(q)
-                          );
-                        })).map((log) => {
+                        filteredAuditLogs.map((log) => {
                           const severityColors = {
                             info: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300',
                             warning: 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
@@ -2730,7 +4198,12 @@ export default function App() {
                           };
 
                           return (
-                            <tr key={log.id} className="hover:bg-slate-500/5 transition text-slate-900 dark:text-white">
+                            <tr 
+                              key={log.id} 
+                              className="hover:bg-slate-500/5 transition text-slate-900 dark:text-white cursor-pointer"
+                              onClick={() => setSelectedAuditLog(log)}
+                              title="انقر لفتح تفاصيل هذه العملية الحساسة"
+                            >
                               <td className="p-3 whitespace-nowrap font-mono text-[10px] text-slate-500">
                                 {new Date(log.timestamp).toLocaleString('ar-EG')}
                               </td>
@@ -2743,8 +4216,21 @@ export default function App() {
                               <td className="p-3 whitespace-nowrap font-semibold text-slate-600 dark:text-slate-400">
                                 {log.operator}
                               </td>
-                              <td className="p-3 text-slate-500 dark:text-slate-300 max-w-[400px] leading-relaxed">
+                              <td className="p-3 text-slate-500 dark:text-slate-300 max-w-[300px] leading-relaxed truncate">
                                 {log.details}
+                              </td>
+                              <td className="p-3 text-center whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedAuditLog(log);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500 hover:text-white dark:text-emerald-400 text-[10px] font-black transition cursor-pointer"
+                                >
+                                  <Eye size={12} />
+                                  <span>فتح</span>
+                                </button>
                               </td>
                             </tr>
                           );
@@ -2788,6 +4274,288 @@ export default function App() {
           <Menu size={16} />
           <span>إظهار القائمة الانتقالية</span>
         </button>
+      )}
+
+      {/* Print-Only Active POS Receipt/Invoice Container */}
+      {lastPrintedSale && (
+        <div className="print-only hidden">
+          <div className="print-invoice-wrapper bg-white p-6 space-y-6 text-right" dir="rtl">
+            {/* Header */}
+            <div className="border-b border-slate-200 pb-4 text-right space-y-4">
+              <div className="flex justify-between items-start">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full uppercase">
+                    فاتورة مبيعات معتمدة (صادرة عن نقطة البيع)
+                  </span>
+                  <h3 className="font-extrabold text-lg text-slate-950">
+                    رقم الفاتورة: <span className="font-mono">{lastPrintedSale.invoiceNo}</span>
+                  </h3>
+                  {shopMeta.showInvoiceDate !== false && (
+                    <p className="text-xs text-slate-500">{new Date(lastPrintedSale.date).toLocaleString('ar-EG')}</p>
+                  )}
+                </div>
+                
+                {shopMeta.showInvoiceLogo !== false && (
+                  <div className="flex items-center gap-2">
+                    {base64Logo ? (
+                      <img src={base64Logo} alt="Logo" className="w-10 h-10 rounded-xl object-contain border border-slate-200 p-0.5 bg-white" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white font-extrabold text-lg shadow-sm">
+                        غك
+                      </div>
+                    )}
+                    <div className="text-left font-bold text-xs text-slate-400">غزة كاش ERP</div>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 pt-2 text-xs">
+                {shopMeta.showInvoiceBranch !== false ? (
+                  <>
+                    <div className="space-y-1">
+                      <span className="text-slate-400 block font-bold">موقع المستودع / الفرع:</span>
+                      <span className="font-bold text-slate-800">{lastPrintedSale.branchName || 'الفرع الرئيسي'}</span>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-slate-400 block font-bold">العميل المستلم:</span>
+                      <span className="font-bold text-slate-800">{lastPrintedSale.customerName}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-1 col-span-2">
+                    <span className="text-slate-400 block font-bold">العميل المستلم:</span>
+                    <span className="font-bold text-slate-800">{lastPrintedSale.customerName}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Items Table */}
+            <div className="space-y-2">
+              <h4 className="font-bold text-xs text-slate-500">تفاصيل السلع والأصناف المدرجة:</h4>
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-right text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                      <th className="p-2.5">اسم الصنف</th>
+                      <th className="p-2.5 text-center">الوحدة المستخدمة</th>
+                      <th className="p-2.5 text-center">الكمية</th>
+                      <th className="p-2.5 text-center">سعر الوحدة</th>
+                      <th className="p-2.5 text-left pl-3">الإجمالي</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 text-slate-800">
+                    {lastPrintedSale.items.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50 transition">
+                        <td className="p-2.5 font-semibold">{item.itemName}</td>
+                        <td className="p-2.5 text-center text-slate-500">{item.unitName}</td>
+                        <td className="p-2.5 text-center font-mono font-bold">{item.quantity}</td>
+                        <td className="p-2.5 text-center font-mono">{item.price.toFixed(2)}</td>
+                        <td className="p-2.5 text-left pl-3 font-mono font-bold text-slate-900">{(item.quantity * item.price).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Totals */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-200">
+              <div className="space-y-1.5 text-xs text-slate-500 italic">
+                <span className="font-bold text-slate-400 block not-italic">ملاحظات الفاتورة:</span>
+                {lastPrintedSale.notes || 'شكرًا لتعاملكم معنا! نسعد بخدمتكم دائمًا.'}
+              </div>
+
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between items-center text-slate-500">
+                  <span>المجموع قبل الخصم:</span>
+                  <span className="font-mono">{lastPrintedSale.subTotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-500">
+                  <span>قيمة الخصم الممنوح:</span>
+                  <span className="font-mono text-red-500">-{lastPrintedSale.discount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center font-bold text-sm text-slate-900 border-t border-dashed border-slate-300 pt-2">
+                  <span>صافي قيمة الفاتورة النهائي:</span>
+                  <span className="font-mono text-emerald-600">
+                    {lastPrintedSale.total.toFixed(2)} {(currencies.find(c => c.id === lastPrintedSale.currencyId) || activeCurrency).symbol}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-slate-500">
+                  <span>المبلغ المدفوع (نقداً):</span>
+                  <span className="font-mono text-slate-900">
+                    {lastPrintedSale.paidAmount.toFixed(2)} {(currencies.find(c => c.id === lastPrintedSale.currencyId) || activeCurrency).symbol}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center font-bold text-xs text-slate-500">
+                  <span>المتبقي في حساب الذمم:</span>
+                  <span className={`font-mono ${lastPrintedSale.total - lastPrintedSale.paidAmount > 0 ? 'text-amber-500' : 'text-slate-400'}`}>
+                    {(lastPrintedSale.total - lastPrintedSale.paidAmount).toFixed(2)} {(currencies.find(c => c.id === lastPrintedSale.currencyId) || activeCurrency).symbol}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center font-bold text-xs text-slate-500">
+                  <span>طريقة دفع الفاتورة:</span>
+                  <span className={`px-2 py-0.5 rounded-full ${lastPrintedSale.paymentType === 'cash' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {lastPrintedSale.paymentType === 'cash' ? 'نقدي كامل' : 'آجل على الحساب'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Premium Confirmation Dialog */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300"
+            onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          />
+          {/* Modal Container */}
+          <div className="bg-white dark:bg-slate-950 rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-right" dir="rtl">
+            <div className="flex items-start gap-3">
+              <div className={`p-2.5 rounded-full shrink-0 ${confirmModal.isDanger ? 'bg-red-500/10 text-red-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                <AlertTriangle size={24} />
+              </div>
+              <div className="flex-1 space-y-2">
+                <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
+                  {confirmModal.title}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed whitespace-pre-line">
+                  {confirmModal.message}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-extrabold text-xs transition border border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                تراجع وإلغاء
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                  confirmModal.onConfirm();
+                }}
+                className={`px-4 py-2 rounded-xl text-white font-extrabold text-xs transition cursor-pointer shadow-md ${
+                  confirmModal.isDanger 
+                    ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20' 
+                    : 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20'
+                }`}
+              >
+                تأكيد الإجراء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Detailed View for Selected Audit Log */}
+      {selectedAuditLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300"
+            onClick={() => setSelectedAuditLog(null)}
+          />
+          {/* Modal Container */}
+          <div className="bg-white dark:bg-slate-950 rounded-2xl max-w-xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-right" dir="rtl">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-4 mb-5">
+              <div className="flex items-center gap-2">
+                <div className={`p-2 rounded-xl ${
+                  selectedAuditLog.severity === 'critical' 
+                    ? 'bg-red-500/10 text-red-500' 
+                    : selectedAuditLog.severity === 'warning' 
+                      ? 'bg-amber-500/10 text-amber-500' 
+                      : 'bg-emerald-500/10 text-emerald-500'
+                }`}>
+                  {selectedAuditLog.severity === 'info' ? <Info size={18} /> : <AlertTriangle size={18} />}
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 dark:text-white text-sm">تفاصيل العملية الأمنية الحساسة</h3>
+                  <p className="text-[10px] text-slate-400">سجل الأمان والتحقق الرقمي لـ غزة كاش ERP</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedAuditLog(null)}
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="space-y-4">
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-500/5 rounded-xl border border-slate-100 dark:border-slate-800/60">
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 block">نوع الإجراء أو العملية</span>
+                  <span className="text-xs font-black text-slate-800 dark:text-slate-200 block mt-1">{selectedAuditLog.action}</span>
+                </div>
+
+                <div className="p-3 bg-slate-500/5 rounded-xl border border-slate-100 dark:border-slate-800/60">
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 block">المنفذ / المسؤول</span>
+                  <span className="text-xs font-black text-slate-800 dark:text-slate-200 block mt-1">{selectedAuditLog.operator}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-500/5 rounded-xl border border-slate-100 dark:border-slate-800/60">
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 block">التاريخ والوقت الكامل</span>
+                  <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 block mt-1 leading-none" dir="ltr">
+                    {new Date(selectedAuditLog.timestamp).toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'medium' })}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-500/5 rounded-xl border border-slate-100 dark:border-slate-800/60">
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 block">مستوى الخطورة الأمنية</span>
+                  <div className="mt-1">
+                    <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-black ${
+                      selectedAuditLog.severity === 'critical' 
+                        ? 'bg-red-500/10 text-red-500 border border-red-500/20' 
+                        : selectedAuditLog.severity === 'warning' 
+                          ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' 
+                          : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                    }`}>
+                      {selectedAuditLog.severity === 'critical' ? 'حرج جداً' : selectedAuditLog.severity === 'warning' ? 'تنبيه أمني' : 'عملية اعتيادية'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Full Details Box */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold block">مخرجات العملية والتفاصيل الدقيقة:</span>
+                <div className="p-4 bg-slate-900 dark:bg-black border border-slate-800 rounded-xl max-h-[180px] overflow-y-auto no-scrollbar">
+                  <p className="text-slate-200 dark:text-slate-300 font-mono text-[11px] leading-relaxed break-words whitespace-pre-line text-left" dir="ltr">
+                    {selectedAuditLog.details}
+                  </p>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setSelectedAuditLog(null)}
+                className="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-extrabold text-xs transition border border-slate-200 dark:border-slate-800 cursor-pointer"
+              >
+                إغلاق النافذة
+              </button>
+            </div>
+
+          </div>
+        </div>
       )}
 
     </div>

@@ -1507,26 +1507,6 @@ export default function Reports({
       {/* Transaction Details Modal */}
       {selectedTx && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print overflow-y-auto">
-          <style>{`
-            @media print {
-              body > *:not(.print-invoice-wrapper) {
-                display: none !important;
-              }
-              .print-invoice-wrapper {
-                position: absolute !important;
-                top: 0 !important;
-                left: 0 !important;
-                right: 0 !important;
-                bottom: 0 !important;
-                width: 100% !important;
-                height: auto !important;
-                background: white !important;
-                color: black !important;
-                z-index: 99999 !important;
-                padding: 20px !important;
-              }
-            }
-          `}</style>
           <div className="print-invoice-wrapper bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 p-6 space-y-6 relative max-h-[90vh] overflow-y-auto">
             {/* Close Button */}
             <button
@@ -1683,26 +1663,6 @@ export default function Reports({
 
       {showSalesReportPrintModal && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print overflow-y-auto">
-          <style>{`
-            @media print {
-              body > *:not(.print-report-wrapper) {
-                display: none !important;
-              }
-              .print-report-wrapper {
-                position: absolute !important;
-                top: 0 !important;
-                left: 0 !important;
-                right: 0 !important;
-                bottom: 0 !important;
-                width: 100% !important;
-                height: auto !important;
-                background: white !important;
-                color: black !important;
-                z-index: 99999 !important;
-                padding: 15px !important;
-              }
-            }
-          `}</style>
           <div className="print-report-wrapper bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-4xl w-full border border-slate-200 dark:border-slate-800 p-6 space-y-6 relative max-h-[90vh] overflow-y-auto">
             {/* Close / Action controls (no-print) */}
             <div className="flex justify-between items-center pb-4 border-b border-slate-100 dark:border-slate-800 no-print">

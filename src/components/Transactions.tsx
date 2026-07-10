@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { ShoppingBag, ArrowLeftRight, FileCode, Plus, Trash2, Printer, Search, ClipboardList, AlertCircle, Save } from 'lucide-react';
+import { ShoppingBag, ArrowLeftRight, FileCode, Plus, Trash2, Printer, Search, ClipboardList, AlertCircle, Save, X } from 'lucide-react';
 import { Item, CustomerSupplier, Purchase, SalesReturn, Quotation, TransactionItem, Branch, Currency } from '../types';
 
 interface TransactionsProps {
@@ -17,6 +17,7 @@ interface TransactionsProps {
   onSavePurchase: (purchase: Omit<Purchase, 'id' | 'invoiceNo' | 'date'>) => void;
   onSaveReturn: (ret: Omit<SalesReturn, 'id' | 'returnNo' | 'date'>) => void;
   onSaveQuotation: (quo: Omit<Quotation, 'id' | 'quotationNo' | 'date'>) => void;
+  onAddContact?: (contact: Omit<CustomerSupplier, 'id' | 'currentBalance'>) => void;
   activeCurrency?: Currency;
   initialTab?: 'purchase' | 'return' | 'quotation';
 }
@@ -31,6 +32,7 @@ export default function Transactions({
   onSavePurchase,
   onSaveReturn,
   onSaveQuotation,
+  onAddContact,
   activeCurrency,
   initialTab
 }: TransactionsProps) {
@@ -59,6 +61,71 @@ export default function Transactions({
   const [purchaseDiscount, setPurchaseDiscount] = useState<number>(0);
   const [purchasePaidAmount, setPurchasePaidAmount] = useState<number>(0);
   const [purchaseNotes, setPurchaseNotes] = useState('');
+
+  // Helper for dynamic premium toasts
+  const toast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success') => {
+    if ((window as any).showToast) {
+      (window as any).showToast(message, type);
+    } else {
+      alert(message);
+    }
+  };
+
+  // Quick Add Supplier States
+  const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
+  const [newSupplierName, setNewSupplierName] = useState('');
+  const [newSupplierPhone, setNewSupplierPhone] = useState('');
+  const [newSupplierAddress, setNewSupplierAddress] = useState('');
+  const [newSupplierInitialBalance, setNewSupplierInitialBalance] = useState<number>(0);
+  const [balanceType, setBalanceType] = useState<'credit' | 'debit'>('credit'); // credit: له (+), debit: عليه (-)
+  const [shouldSelectLastAdded, setShouldSelectLastAdded] = useState(false);
+
+  // Monitor contacts to auto-select newly added supplier
+  React.useEffect(() => {
+    if (shouldSelectLastAdded && contacts.length > 0) {
+      const suppliers = contacts.filter(c => c.type === 'supplier' || c.type === 'both');
+      if (suppliers.length > 0) {
+        const lastSupplier = suppliers[suppliers.length - 1];
+        setSelectedSupplierId(lastSupplier.id);
+      }
+      setShouldSelectLastAdded(false);
+    }
+  }, [contacts, shouldSelectLastAdded]);
+
+  const handleQuickAddSupplierSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSupplierName.trim()) {
+      toast('يرجى كتابة اسم المورد المالي الجديد', 'warning');
+      return;
+    }
+    
+    if (!onAddContact) {
+      toast('ميزة إضافة الموردين غير متاحة حالياً', 'error');
+      return;
+    }
+
+    const calculatedBalance = balanceType === 'credit' ? Math.abs(newSupplierInitialBalance) : -Math.abs(newSupplierInitialBalance);
+    
+    onAddContact({
+      name: newSupplierName,
+      type: 'supplier',
+      phone: newSupplierPhone || 'بدون رقم',
+      address: newSupplierAddress || 'العنوان الافتراضي',
+      initialBalance: calculatedBalance,
+    });
+
+    setShouldSelectLastAdded(true);
+
+    // Clean up
+    setNewSupplierName('');
+    setNewSupplierPhone('');
+    setNewSupplierAddress('');
+    setNewSupplierInitialBalance(0);
+    setBalanceType('credit');
+    setShowAddSupplierModal(false);
+
+    toast('تم تسجيل المورد الجديد بنجاح وجاري اختياره تلقائياً! 🎉', 'success');
+  };
 
   // Customer Return states
   const [returnItemId, setReturnItemId] = useState('');
@@ -118,11 +185,11 @@ export default function Transactions({
   const submitPurchase = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSupplierId) {
-      alert('الرجاء اختيار المورد أولاً');
+      toast('الرجاء اختيار المورد أولاً', 'warning');
       return;
     }
     if (purchaseCart.length === 0) {
-      alert('السلة فارغة! لا توجد مواد شراء');
+      toast('السلة فارغة! لا توجد مواد شراء', 'warning');
       return;
     }
 
@@ -164,22 +231,22 @@ export default function Transactions({
     setPurchaseNotes('');
     setPurchaseDiscount(0);
     setPurchasePaidAmount(0);
-    alert('تم حفظ فاتورة شراء المخزون وتحديث الكميات وحسابات المورد المعتمدة!');
+    toast('تم حفظ فاتورة شراء المخزون وتحديث الكميات وحسابات المورد المعتمدة! 📦', 'success');
   };
 
   // --- Return Action ---
   const submitReturn = (e: React.FormEvent) => {
     e.preventDefault();
     if (!returnCustomerId) {
-      alert('الرجاء اختيار حساب العميل المرتجع منه');
+      toast('الرجاء اختيار حساب العميل المرتجع منه', 'warning');
       return;
     }
     if (!returnItemId) {
-      alert('الرجاء تحديد الصنف المرتجع');
+      toast('الرجاء تحديد الصنف المرتجع', 'warning');
       return;
     }
     if (returnQty <= 0) {
-      alert('الكمية المرجوعة يجب أن تفوق الصفر');
+      toast('الكمية المرجوعة يجب أن تفوق الصفر', 'warning');
       return;
     }
 
@@ -220,7 +287,7 @@ export default function Transactions({
     setReturnCustomerId('');
     setOriginalInv('');
     setReturnNotes('');
-    alert('تم تسجيل سند مرتجع المبيعات وإدخال الكمية للمستودع وإعادة قيمة الذمة المالية للعميل!');
+    toast('تم تسجيل سند مرتجع المبيعات وإدخال الكمية للمستودع وإعادة قيمة الذمة المالية للعميل! 🔄', 'success');
   };
 
   // --- Quotation Cart Actions ---
@@ -249,11 +316,11 @@ export default function Transactions({
   const submitQuotation = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedQuotationCustomerId) {
-      alert('يرجى اختيار العميل لعرض الأسعار أولاً');
+      toast('يرجى اختيار العميل لعرض الأسعار أولاً', 'warning');
       return;
     }
     if (quotationCart.length === 0) {
-      alert('سلة العرض فارغة، يرجى إضافة أصناف');
+      toast('سلة العرض فارغة، يرجى إضافة أصناف', 'warning');
       return;
     }
 
@@ -292,7 +359,7 @@ export default function Transactions({
     setSelectedQuotationCustomerId('');
     setQuotationNotes('');
     setQuotationDiscount(0);
-    alert('تم حفظ وتحديث عرض الأسعار بنجاح! جاهز للتصدير أو المراجعة الطباعية.');
+    toast('تم حفظ وتحديث عرض الأسعار بنجاح! جاهز للتصدير أو المراجعة الطباعية. 📄', 'success');
   };
 
   return (
@@ -428,8 +495,17 @@ export default function Transactions({
             <h3 className="font-bold text-md text-slate-800 dark:text-slate-100 pb-2 border-b border-white/10">سند الفاتورة والحساب الجاري</h3>
             
             <form onSubmit={submitPurchase} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">اختر حساب المورد المالي</label>
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">اختر حساب المورد المالي</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddSupplierModal(true)}
+                    className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Plus size={12} /> مورد جديد؟
+                  </button>
+                </div>
                 <select
                   value={selectedSupplierId}
                   onChange={(e) => setSelectedSupplierId(e.target.value)}
@@ -822,6 +898,111 @@ export default function Transactions({
               >
                 <Save size={16} /> حفظ وتصدير عرض الأسعار
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Add Supplier Modal */}
+      {showAddSupplierModal && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4" dir="rtl">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            onClick={() => setShowAddSupplierModal(false)}
+          />
+          
+          {/* Modal Content */}
+          <div className="relative bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4 overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-extrabold text-sm text-slate-800 dark:text-slate-200">➕ إضافة حساب مورد جديد للمنظومة</h3>
+              <button 
+                type="button"
+                onClick={() => setShowAddSupplierModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickAddSupplierSubmit} className="space-y-4 text-right">
+              {/* Name */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500">اسم المورد / الشركة *</label>
+                <input
+                  type="text"
+                  value={newSupplierName}
+                  onChange={(e) => setNewSupplierName(e.target.value)}
+                  placeholder="مثال: شركة القدس للاستيراد والشركاء..."
+                  className="w-full p-2.5 rounded-xl glass-input text-xs text-slate-900 dark:text-white font-bold"
+                  required
+                />
+              </div>
+
+              {/* Phone */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500">رقم الهاتف</label>
+                <input
+                  type="text"
+                  value={newSupplierPhone}
+                  onChange={(e) => setNewSupplierPhone(e.target.value)}
+                  placeholder="مثال: 059XXXXXXX"
+                  className="w-full p-2.5 rounded-xl glass-input text-xs text-slate-900 dark:text-white font-mono font-bold text-left"
+                />
+              </div>
+
+              {/* Address */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500">عنوان المقر أو المستودع الرئيسي</label>
+                <input
+                  type="text"
+                  value={newSupplierAddress}
+                  onChange={(e) => setNewSupplierAddress(e.target.value)}
+                  placeholder="مثال: غزة، شارع عمر المختار..."
+                  className="w-full p-2.5 rounded-xl glass-input text-xs text-slate-900 dark:text-white font-bold"
+                />
+              </div>
+
+              {/* Initial Balance */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">الرصيد الافتتاحي ({currency.symbol})</label>
+                  <input
+                    type="number"
+                    value={newSupplierInitialBalance || ''}
+                    onChange={(e) => setNewSupplierInitialBalance(Math.max(0, Number(e.target.value)))}
+                    placeholder="0.00"
+                    className="w-full p-2.5 rounded-xl glass-input text-xs text-slate-900 dark:text-white font-mono font-bold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">طبيعة الرصيد</label>
+                  <select
+                    value={balanceType}
+                    onChange={(e) => setBalanceType(e.target.value as 'credit' | 'debit')}
+                    className="w-full p-2.5 rounded-xl glass-input text-xs text-slate-900 dark:text-white font-bold"
+                  >
+                    <option value="credit">دائن - له رصيد علينا (+)</option>
+                    <option value="debit">مدين - عليه التزام لنا (-)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowAddSupplierModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer shadow-md transition-all flex items-center gap-1.5"
+                >
+                  <Save size={14} /> إضافة واعتماد المورد
+                </button>
+              </div>
             </form>
           </div>
         </div>

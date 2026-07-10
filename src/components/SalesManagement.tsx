@@ -19,9 +19,10 @@ import {
   Eye, 
   Store,
   SlidersHorizontal,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Printer
 } from 'lucide-react';
-import { Sale, SalesReturn, CustomerSupplier, Branch, Item, TransactionItem } from '../types';
+import { Sale, SalesReturn, CustomerSupplier, Branch, Item, TransactionItem, Currency, ShopSettings } from '../types';
 
 interface SalesManagementProps {
   sales: Sale[];
@@ -34,6 +35,9 @@ interface SalesManagementProps {
   onUpdateReturn: (id: string, updatedReturn: SalesReturn) => void;
   onDeleteSale: (invoiceNo: string, reason: string) => void;
   onDeleteReturn: (id: string, reason: string) => void;
+  activeCurrency?: Currency;
+  currencies?: Currency[];
+  shopSettings?: ShopSettings;
 }
 
 export default function SalesManagement({
@@ -46,9 +50,83 @@ export default function SalesManagement({
   onUpdateSale,
   onUpdateReturn,
   onDeleteSale,
-  onDeleteReturn
+  onDeleteReturn,
+  activeCurrency,
+  currencies = [],
+  shopSettings
 }: SalesManagementProps) {
   
+  // Helper for dynamic premium toasts
+  const toast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success') => {
+    if ((window as any).showToast) {
+      (window as any).showToast(message, type);
+    } else {
+      alert(message);
+    }
+  };
+
+  const handlePrintInvoice = async (invoiceId: string) => {
+    const sale = sales.find(s => s.id === invoiceId);
+    if (!sale) {
+      toast('لم يتم العثور على الفاتورة المطلوبة!', 'error');
+      return;
+    }
+
+    try {
+      const { usePrint } = await import('../utils/usePrint');
+      const { exportInvoiceToPDF } = usePrint();
+      
+      const settings = {
+        name: shopSettings?.name || 'غزة كاش ERP',
+        address: shopSettings?.address || 'غزة، فلسطين',
+        phone: shopSettings?.phone || '',
+        logoText: shopSettings?.logoText || 'غك'
+      };
+
+      const saleCurrencySymbol = currencies.find(c => c.id === sale.currencyId)?.symbol || activeCurrency?.symbol || '₪';
+
+      await exportInvoiceToPDF(
+        sale,
+        'sale',
+        settings,
+        saleCurrencySymbol
+      );
+    } catch (error: any) {
+      console.error('Error printing previous invoice:', error);
+      toast(`⚠️ حدث خطأ أثناء إعداد وطباعة الفاتورة: ${error.message || String(error)}`, 'error');
+    }
+  };
+
+  const handlePrintReturn = async (returnId: string) => {
+    const ret = returns.find(r => r.id === returnId);
+    if (!ret) {
+      toast('لم يتم العثور على مستند المرتجع المطلوب!', 'error');
+      return;
+    }
+
+    try {
+      const { usePrint } = await import('../utils/usePrint');
+      const { exportInvoiceToPDF } = usePrint();
+      
+      const settings = {
+        name: shopSettings?.name || 'غزة كاش ERP',
+        address: shopSettings?.address || 'غزة، فلسطين',
+        phone: shopSettings?.phone || '',
+        logoText: shopSettings?.logoText || 'غك'
+      };
+
+      await exportInvoiceToPDF(
+        ret,
+        'return_in',
+        settings,
+        activeCurrency?.symbol || '₪'
+      );
+    } catch (error: any) {
+      console.error('Error printing return invoice:', error);
+      toast(`⚠️ حدث خطأ أثناء إعداد وطباعة مستند المرتجع: ${error.message || String(error)}`, 'error');
+    }
+  };
+
   // Tab states: 'sales' | 'returns'
   const [activeSubTab, setActiveSubTab] = useState<'sales' | 'returns'>('sales');
 
@@ -239,13 +317,13 @@ export default function SalesManagement({
     e.preventDefault();
     if (!editingSale) return;
     if (editingSale.items.length === 0) {
-      alert('لا يمكن حفظ الفاتورة بدون أي أصناف!');
+      toast('لا يمكن حفظ الفاتورة بدون أي أصناف!', 'warning');
       return;
     }
 
     onUpdateSale(editingSale.id, editingSale);
     setEditingSale(null);
-    alert('تم تعديل وحفظ فاتورة المبيعات بنجاح وتحديث أرصدة المخازن والعميل!');
+    toast('تم تعديل وحفظ فاتورة المبيعات بنجاح وتحديث أرصدة المخازن والعميل! 🛒', 'success');
   };
 
 
@@ -340,18 +418,18 @@ export default function SalesManagement({
     e.preventDefault();
     if (!editingReturn) return;
     if (editingReturn.items.length === 0) {
-      alert('لا يمكن حفظ المرتجع بدون أي أصناف!');
+      toast('لا يمكن حفظ المرتجع بدون أي أصناف!', 'warning');
       return;
     }
 
     onUpdateReturn(editingReturn.id, editingReturn);
     setEditingReturn(null);
-    alert('تم تعديل وحفظ مرتجع المبيعات بنجاح وتحديث أرصدة المخازن والعميل!');
+    toast('تم تعديل وحفظ مرتجع المبيعات بنجاح وتحديث أرصدة المخازن والعميل! 🔄', 'success');
   };
 
   const handleTriggerDelete = (id: string, no: string, type: 'sale' | 'return') => {
     if (userRole === 'cashier') {
-      alert('🔒 عذراً! تم إلغاء العملية. دور "كاشير مبيعات" غير مخوّل بحذف أو تعديل الفواتير المعتمدة. يرجى مراجعة مدير النظام.');
+      toast('🔒 عذراً! تم إلغاء العملية. دور "كاشير مبيعات" غير مخوّل بحذف أو تعديل الفواتير المعتمدة. يرجى مراجعة مدير النظام.', 'error');
       return;
     }
     setDeletingInvoice({ id, no, type });
@@ -361,7 +439,7 @@ export default function SalesManagement({
   const handleConfirmDelete = () => {
     if (!deletingInvoice) return;
     if (!deleteReason.trim()) {
-      alert('يرجى كتابة سبب الحذف للإجراءات التدقيقية والأمنية');
+      toast('يرجى كتابة سبب الحذف للإجراءات التدقيقية والأمنية', 'warning');
       return;
     }
 
@@ -372,7 +450,7 @@ export default function SalesManagement({
     }
 
     setDeletingInvoice(null);
-    alert('تم إلغاء وحذف العملية وسجلاتها بالكامل!');
+    toast('تم إلغاء وحذف العملية وسجلاتها بالكامل! 🗑️', 'success');
   };
 
   return (
@@ -579,6 +657,14 @@ export default function SalesManagement({
                           <td className="p-3 text-center whitespace-nowrap">
                             <div className="inline-flex gap-2">
                               <button
+                                onClick={() => handlePrintInvoice(sale.id)}
+                                className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white transition cursor-pointer"
+                                title="طباعة الفاتورة وتصديرها كـ PDF"
+                              >
+                                <Printer size={13} />
+                              </button>
+
+                              <button
                                 onClick={() => setEditingSale(sale)}
                                 className="p-1.5 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white transition cursor-pointer"
                                 title="تعديل الفاتورة بالكامل وتحديث الحسابات والمخزن"
@@ -648,6 +734,14 @@ export default function SalesManagement({
                           <td className="p-3 text-slate-400 text-[11px] leading-relaxed max-w-[200px] truncate">{ret.notes || '-'}</td>
                           <td className="p-3 text-center whitespace-nowrap">
                             <div className="inline-flex gap-2">
+                              <button
+                                onClick={() => handlePrintReturn(ret.id)}
+                                className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white transition cursor-pointer"
+                                title="طباعة سند المرتجع وتصديره كـ PDF"
+                              >
+                                <Printer size={13} />
+                              </button>
+
                               <button
                                 onClick={() => setEditingReturn(ret)}
                                 className="p-1.5 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white transition cursor-pointer"

@@ -249,3 +249,24 @@ export interface UserAccount {
   };
 }
 
+export interface FirewallSettings {
+  enabled: boolean;
+  maxAttempts: number;
+  lockoutDuration: number; // in minutes
+  highSecurityMode: boolean;
+  blockedIps: string[];
+  whitelistedIps: string[];
+}
+
+export interface SecurityAlert {
+  id: string;
+  timestamp: string;
+  type: 'brute_force' | 'unauthorized_access' | 'admin_bypass' | 'ip_blocked' | 'setting_change';
+  ipAddress: string;
+  userAgent: string;
+  details: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  resolved: boolean;
+}
+
+

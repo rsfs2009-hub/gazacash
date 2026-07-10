@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Package, Plus, MapPin, ArrowRightLeft, FileText, ClipboardList, AlertTriangle, Save, RefreshCw, Trash, Upload, FileSpreadsheet, Pencil } from 'lucide-react';
+import { Package, Plus, MapPin, ArrowRightLeft, FileText, ClipboardList, AlertTriangle, Save, RefreshCw, Trash, Upload, FileSpreadsheet, Pencil, Search, X, SlidersHorizontal, Filter } from 'lucide-react';
 import { Item, Branch, BranchStock, BranchTransfer, ItemMovement, Currency } from '../types';
 
 interface InventoryProps {
@@ -21,6 +21,7 @@ interface InventoryProps {
   onAdjustStock?: (itemId: string, branchId: string, actualQty: number, notes: string) => void;
   activeCurrency?: Currency;
   initialTab?: 'items' | 'branches' | 'transfers' | 'ledger' | 'import' | 'adjust';
+  onTabChange?: (tab: 'items' | 'branches' | 'transfers' | 'ledger' | 'import' | 'adjust') => void;
 }
 
 export default function Inventory({
@@ -36,9 +37,19 @@ export default function Inventory({
   onImportItemsAndStock,
   onAdjustStock,
   activeCurrency,
-  initialTab
+  initialTab,
+  onTabChange
 }: InventoryProps) {
   const currency = activeCurrency || { id: 'ILS', name: 'شيكل', symbol: '₪', exchangeRate: 1, isBase: true };
+
+  // Helper for dynamic premium toasts
+  const toast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success') => {
+    if ((window as any).showToast) {
+      (window as any).showToast(message, type);
+    } else {
+      alert(message);
+    }
+  };
 
   // Navigation Tabs within Inventory module
   const [activeTab, setActiveTab] = React.useState<'items' | 'branches' | 'transfers' | 'ledger' | 'import' | 'adjust'>(initialTab || 'items');
@@ -48,6 +59,11 @@ export default function Inventory({
       setActiveTab(initialTab);
     }
   }, [initialTab]);
+
+  const handleTabChange = (tab: 'items' | 'branches' | 'transfers' | 'ledger' | 'import' | 'adjust') => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
 
   // Form states - Add Item
   const [itemName, setItemName] = useState('');
@@ -85,6 +101,20 @@ export default function Inventory({
   const [physicalCounts, setPhysicalCounts] = useState<Record<string, string>>({});
   const [adjustNotes, setAdjustNotes] = useState<Record<string, string>>({});
 
+  // Search & Filtering States
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchName, setSearchName] = useState('');
+  const [searchBarcode, setSearchBarcode] = useState('');
+  const [searchCategory, setSearchCategory] = useState('');
+  const [lowStockThreshold, setLowStockThreshold] = useState<number | ''>('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+
+  // Modal Visibility States
+  const [isItemModalOpen, setIsItemModalOpen] = useState(false);
+  const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+
   // Helper: Get stock for item in a specific branch
   const getBranchStockQty = (itemId: string, branchId: string): number => {
     const stock = branchStock.find(s => s.itemId === itemId && s.branchId === branchId);
@@ -98,16 +128,51 @@ export default function Inventory({
       .reduce((sum, s) => sum + s.quantity, 0);
   };
 
+  // Categories Memo
+  const categories = React.useMemo(() => {
+    const cats = items.map(item => item.category || 'عام').filter(Boolean);
+    return Array.from(new Set(cats));
+  }, [items]);
+
+  // Filtered items for management list
+  const filteredItems = React.useMemo(() => {
+    return items.filter(item => {
+      // 1. Basic search (unified text field)
+      const matchesBasicSearch = !searchTerm.trim() || (
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.barcode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.category || '').toLowerCase().includes(searchTerm.toLowerCase())
+      );
+
+      // 2. Multi-search criteria (discrete fields)
+      const matchesName = !searchName.trim() || item.name.toLowerCase().includes(searchName.toLowerCase());
+      const matchesBarcode = !searchBarcode.trim() || item.barcode.toLowerCase().includes(searchBarcode.toLowerCase());
+      const matchesCatSearch = !searchCategory.trim() || (item.category || '').toLowerCase().includes(searchCategory.toLowerCase());
+
+      // 3. Category selector pill
+      const matchesCategoryPill = 
+        selectedCategory === 'all' || 
+        (item.category || 'عام') === selectedCategory;
+
+      // 4. Low stock check with optional dynamic threshold
+      const stock = getTotalStockQty(item.id);
+      const threshold = lowStockThreshold !== '' ? Number(lowStockThreshold) : item.minStockAlert;
+      const matchesLowStock = !showLowStockOnly || (stock <= threshold);
+
+      return matchesBasicSearch && matchesName && matchesBarcode && matchesCatSearch && matchesCategoryPill && matchesLowStock;
+    });
+  }, [items, searchTerm, searchName, searchBarcode, searchCategory, selectedCategory, showLowStockOnly, lowStockThreshold, branchStock]);
+
   const handleImportProcess = (rawText: string) => {
     if (!onImportItemsAndStock) {
-      alert('ميزة الاستيراد غير متوفرة حالياً في النسخة النشطة.');
+      toast('ميزة الاستيراد غير متوفرة حالياً في النسخة النشطة.', 'warning');
       return;
     }
 
     const separator = rawText.includes('\t') ? '\t' : (rawText.includes(';') ? ';' : ',');
     const lines = rawText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     if (lines.length < 2) {
-      alert('الرجاء التأكد من وجود صف العناوين وصنف واحد على الأقل في الجدول.');
+      toast('الرجاء التأكد من وجود صف العناوين وصنف واحد على الأقل في الجدول.', 'warning');
       return;
     }
 
@@ -152,7 +217,7 @@ export default function Inventory({
     }
 
     if (parsedRows.length === 0) {
-      alert('فشل تحليل وتنسيق أي صفوف؛ يرجى مراجعة ترتيب الأعمدة ومطابقتها للمثال.');
+      toast('فشل تحليل وتنسيق أي صفوف؛ يرجى مراجعة ترتيب الأعمدة ومطابقتها للمثال.', 'error');
       return;
     }
 
@@ -185,14 +250,14 @@ export default function Inventory({
   const handleAddItemSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!itemName || !barcode) {
-      alert('الرجاء تعبئة اسم الصنف والباركود');
+      toast('الرجاء تعبئة اسم الصنف والباركود', 'error');
       return;
     }
 
     const itemPayload = {
       name: itemName,
       barcode,
-      category,
+      category: category || 'عام',
       mainUnit,
       hasSubUnit,
       subUnitName: hasSubUnit ? subUnitName : undefined,
@@ -210,7 +275,7 @@ export default function Inventory({
       onAddItem(itemPayload);
     }
 
-    // Reset Form
+    // Reset Form and close modal
     setItemName('');
     setBarcode('');
     setCategory('');
@@ -222,6 +287,7 @@ export default function Inventory({
     setSalePrice(0);
     setSubUnitSalePrice(0);
     setMinStockAlert(5);
+    setIsItemModalOpen(false);
   };
 
   const handleEditItem = (item: Item) => {
@@ -237,14 +303,14 @@ export default function Inventory({
     setSalePrice(item.salePrice);
     setSubUnitSalePrice(item.subUnitSalePrice || 0);
     setMinStockAlert(item.minStockAlert);
-    setActiveTab('items');
+    setIsItemModalOpen(true);
   };
 
   const handleEditBranch = (branch: Branch) => {
     setSelectedEditBranchId(branch.id);
     setBranchName(branch.name);
     setBranchLocation(branch.location || '');
-    setActiveTab('branches');
+    setIsBranchModalOpen(true);
   };
 
   const handleAddBranchSubmit = (e: React.FormEvent) => {
@@ -256,32 +322,33 @@ export default function Inventory({
         onUpdateBranch(selectedEditBranchId, { name: branchName, location: branchLocation });
       }
       setSelectedEditBranchId(null);
-      alert('تم تعديل بيانات المستودع بنجاح!');
+      toast('تم تعديل بيانات المستودع بنجاح!', 'success');
     } else {
       onAddBranch({
         name: branchName,
         location: branchLocation
       });
-      alert('تم إضافة المستودع بنجاح!');
+      toast('تم إضافة المستودع بنجاح!', 'success');
     }
     setBranchName('');
     setBranchLocation('');
+    setIsBranchModalOpen(false);
   };
 
   const handleTransferSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!fromBranch || !toBranch || !transferItemId || transferQty <= 0) {
-      alert('الرجاء إدخال كافة حقول التحويل بصورة صحيحة');
+      toast('الرجاء إدخال كافة حقول التحويل بصورة صحيحة', 'error');
       return;
     }
     if (fromBranch === toBranch) {
-      alert('لا يمكن التحويل لنفس الفرع!');
+      toast('لا يمكن التحويل لنفس الفرع!', 'warning');
       return;
     }
 
     const currentFromStock = getBranchStockQty(transferItemId, fromBranch);
     if (currentFromStock < transferQty) {
-      alert('عذراً، الكمية المتوفرة في فرع المصدر غير كافية لإجراء التحويل!');
+      toast('عذراً، الكمية المتوفرة في فرع المصدر غير كافية لإجراء التحويل!', 'error');
       return;
     }
 
@@ -305,7 +372,8 @@ export default function Inventory({
     setTransferItemId('');
     setTransferQty(0);
     setTransferNotes('');
-    alert('تم تسجيل عملية التحويل بين الفروع بنجاح وتحديث كميات المخزن!');
+    setIsTransferModalOpen(false);
+    toast('تم تسجيل عملية التحويل بين الفروع بنجاح وتحديث كميات المخزن!', 'success');
   };
 
   // Filtered movements for "كشف حركات الصنف لوحده" (Tab: ledger)
@@ -318,7 +386,7 @@ export default function Inventory({
 
   const handleApplyAdjustments = () => {
     if (!onAdjustStock) {
-      alert('ميزة التعديل غير متوفرة حالياً.');
+      toast('ميزة التعديل غير متوفرة حالياً.', 'error');
       return;
     }
 
@@ -331,7 +399,7 @@ export default function Inventory({
     });
 
     if (itemsToAdjust.length === 0) {
-      alert('لم يتم العثور على أي تغييرات في الكميات الفعلية عن الكميات الدفترية لتسويتها.');
+      toast('لم يتم العثور على أي تغييرات في الكميات الفعلية عن الكميات الدفترية لتسويتها.', 'warning');
       return;
     }
 
@@ -348,7 +416,7 @@ export default function Inventory({
       successCount++;
     });
 
-    alert(`تم بنجاح اعتماد تسوية جرد المستودع وتعديل المخزون لـ ${successCount} أصناف بنجاح!`);
+    toast(`تم بنجاح اعتماد تسوية جرد المستودع وتعديل المخزون لـ ${successCount} أصناف بنجاح!`, 'success');
     setPhysicalCounts({});
     setAdjustNotes({});
   };
@@ -358,38 +426,38 @@ export default function Inventory({
       {/* Tab bar header */}
       <div className="flex border-b border-slate-200 dark:border-slate-800 gap-4 overflow-x-auto no-scrollbar pb-1">
         <button
-          onClick={() => setActiveTab('items')}
+          onClick={() => handleTabChange('items')}
           className={`pb-3 font-bold text-sm transition-all relative flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${activeTab === 'items' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           <Package size={16} /> الأصناف والمخزون
         </button>
         <button
-          onClick={() => setActiveTab('branches')}
+          onClick={() => handleTabChange('branches')}
           className={`pb-3 font-bold text-sm transition-all relative flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${activeTab === 'branches' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           <MapPin size={16} /> الفروع والمستودعات
         </button>
         <button
-          onClick={() => setActiveTab('transfers')}
+          onClick={() => handleTabChange('transfers')}
           className={`pb-3 font-bold text-sm transition-all relative flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${activeTab === 'transfers' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           <ArrowRightLeft size={16} /> تحويل بين الفروع
         </button>
         <button
-          onClick={() => setActiveTab('ledger')}
+          onClick={() => handleTabChange('ledger')}
           className={`pb-3 font-bold text-sm transition-all relative flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${activeTab === 'ledger' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
           id="item_movement_card"
         >
           <ClipboardList size={16} /> كشف حركات الصنف لوحده
         </button>
         <button
-          onClick={() => setActiveTab('import')}
+          onClick={() => handleTabChange('import')}
           className={`pb-3 font-bold text-sm transition-all relative flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${activeTab === 'import' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           <Upload size={16} /> استيراد رصيد أول المدة (إكسل)
         </button>
         <button
-          onClick={() => setActiveTab('adjust')}
+          onClick={() => handleTabChange('adjust')}
           className={`pb-3 font-bold text-sm transition-all relative flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${activeTab === 'adjust' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           <ClipboardList size={16} className="text-amber-500" /> جرد وتعديل المخزون الفعلي
@@ -398,190 +466,191 @@ export default function Inventory({
 
       {/* 1. TAB: ITEMS MANAGEMENT */}
       {activeTab === 'items' && (
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-          {/* Add / Edit Item Form Panel */}
-          <div className="xl:col-span-4 rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
-            <h3 className="font-bold text-md text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-              <Plus size={18} className="text-emerald-500" />
-              {selectedEditItemId ? 'تعديل بيانات الصنف' : 'إضافة صنف جديد'}
-            </h3>
-
-            <form onSubmit={handleAddItemSubmit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2 space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">اسم الصنف التجاري</label>
-                  <input
-                    type="text"
-                    value={itemName}
-                    onChange={(e) => setItemName(e.target.value)}
-                    placeholder="مثال: أرز الياسمين 5 كيلو"
-                    className="w-full p-2.5 rounded-xl glass-input text-sm text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    required
-                  />
-                </div>
-                
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">الباركود</label>
-                  <input
-                    type="text"
-                    value={barcode}
-                    onChange={(e) => setBarcode(e.target.value)}
-                    placeholder="امسح أو اكتب الرمز"
-                    className="w-full p-2.5 rounded-xl glass-input text-sm font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">التصنيف / القسم</label>
-                  <input
-                    type="text"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    placeholder="مثال: مواد غذائية"
-                    className="w-full p-2.5 rounded-xl glass-input text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
+        <div className="space-y-5 animate-in fade-in duration-200">
+          {/* Advanced Search & Filtering Bar */}
+          <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="space-y-1 text-right">
+                <h3 className="font-extrabold text-sm text-slate-800 dark:text-slate-200">🔍 محرك البحث الذكي والتصفية المتطورة</h3>
+                <p className="text-[11px] text-slate-400">ابحث بمرونة تامة عن طريق حقول مخصصة أو فلاتر النواقص الذكية في ثوانٍ معدودة.</p>
               </div>
 
-              {/* Unit Configuration */}
-              <div className="bg-slate-500/5 rounded-xl p-3 border border-white/10 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-600 dark:text-slate-300">الوحدة الأساسية الكبرى</label>
-                    <input
-                      type="text"
-                      value={mainUnit}
-                      onChange={(e) => setMainUnit(e.target.value)}
-                      placeholder="كرتونة، شوال، صندوق"
-                      className="w-full p-2 rounded-xl glass-input text-xs text-slate-900 dark:text-white focus:outline-none"
-                    />
-                  </div>
-                  
-                  <div className="flex items-center gap-1.5 pt-6">
-                    <input
-                      type="checkbox"
-                      id="hasSubUnit"
-                      checked={hasSubUnit}
-                      onChange={(e) => setHasSubUnit(e.target.checked)}
-                      className="w-4 h-4 text-emerald-500 rounded border-slate-300 focus:ring-emerald-500"
-                    />
-                    <label htmlFor="hasSubUnit" className="text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">يحتوي وحدة صغيرة</label>
-                  </div>
-                </div>
-
-                {hasSubUnit && (
-                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">اسم الوحدة الصغيرة</label>
-                      <input
-                        type="text"
-                        value={subUnitName}
-                        onChange={(e) => setSubUnitName(e.target.value)}
-                        placeholder="حبة، علبة، كيلو"
-                        className="w-full p-2 rounded-xl glass-input text-xs text-slate-900 dark:text-white focus:outline-none"
-                        required={hasSubUnit}
-                      />
-                    </div>
-                    
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">معدل التعبئة (التحويل)</label>
-                      <input
-                        type="number"
-                        value={conversionRate}
-                        onChange={(e) => setConversionRate(Math.max(1, +e.target.value))}
-                        className="w-full p-2 rounded-xl glass-input text-xs text-slate-900 dark:text-white font-mono focus:outline-none"
-                        required={hasSubUnit}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Cost and Pricing */}
-              <div className="grid grid-cols-2 gap-3 bg-emerald-500/5 dark:bg-emerald-500/5 rounded-xl p-3 border border-emerald-500/10">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400">سعر شراء الكبرى</label>
-                  <input
-                    type="number"
-                    value={purchasePrice}
-                    onChange={(e) => setPurchasePrice(Math.max(0, +e.target.value))}
-                    className="w-full p-2 rounded-xl glass-input text-xs font-bold font-mono text-slate-900 dark:text-white focus:outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400">سعر بيع الكبرى</label>
-                  <input
-                    type="number"
-                    value={salePrice}
-                    onChange={(e) => setSalePrice(Math.max(0, +e.target.value))}
-                    className="w-full p-2 rounded-xl glass-input text-xs font-bold font-mono text-slate-900 dark:text-white focus:outline-none"
-                  />
-                </div>
-
-                {hasSubUnit && (
-                  <div className="col-span-2 space-y-1 border-t border-emerald-500/10 pt-2">
-                    <label className="text-xs font-bold text-emerald-600 dark:text-emerald-400">سعر بيع الوحدة الصغيرة (المقترح: {(salePrice / (conversionRate || 1)).toFixed(2)})</label>
-                    <input
-                      type="number"
-                      value={subUnitSalePrice}
-                      onChange={(e) => setSubUnitSalePrice(Math.max(0, +e.target.value))}
-                      className="w-full p-2 rounded-xl glass-input text-xs font-bold font-mono text-slate-900 dark:text-white focus:outline-none"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Alert limits */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">حد الطلب (تنبيه قرب نفاد الصنف)</label>
-                <input
-                  type="number"
-                  value={minStockAlert}
-                  onChange={(e) => setMinStockAlert(Math.max(0, +e.target.value))}
-                  className="w-full p-2.5 rounded-xl glass-input text-sm font-mono text-slate-900 dark:text-white focus:outline-none"
-                />
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-2 pt-2">
+              {/* Filtering Toggles & Add Button */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Low Stock Toggle Button */}
                 <button
-                  type="submit"
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-sm shadow transition-all flex items-center justify-center gap-1 cursor-pointer"
+                  type="button"
+                  onClick={() => setShowLowStockOnly(!showLowStockOnly)}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 border transition-all cursor-pointer ${
+                    showLowStockOnly
+                      ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30 ring-2 ring-rose-500/10 font-extrabold'
+                      : 'bg-slate-500/5 hover:bg-slate-500/10 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                  }`}
                 >
-                  <Save size={16} /> {selectedEditItemId ? 'تحديث الصنف' : 'حفظ الصنف الجديد'}
+                  <AlertTriangle size={14} className={showLowStockOnly ? 'animate-pulse text-rose-500' : 'text-amber-500'} />
+                  <span>النواقص فقط ({items.filter(item => getTotalStockQty(item.id) <= item.minStockAlert).length})</span>
                 </button>
-                {selectedEditItemId && (
+
+                {/* Add New Item Action Trigger */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedEditItemId(null);
+                    setItemName('');
+                    setBarcode('');
+                    setCategory('');
+                    setMainUnit('حبة');
+                    setHasSubUnit(false);
+                    setSubUnitName('');
+                    setConversionRate(12);
+                    setPurchasePrice(0);
+                    setSalePrice(0);
+                    setSubUnitSalePrice(0);
+                    setMinStockAlert(5);
+                    setIsItemModalOpen(true);
+                  }}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-md cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <Plus size={16} />
+                  <span>إضافة صنف جديد</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Grid of Specialized Inputs for Multi-Search */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-1 text-right">
+              {/* 1. Name Search */}
+              <div className="relative">
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold pointer-events-none">الاسم:</span>
+                <input
+                  type="text"
+                  value={searchName}
+                  onChange={(e) => setSearchName(e.target.value)}
+                  placeholder="اسم الصنف المراد..."
+                  className="w-full pr-12 pl-8 py-2 rounded-xl glass-input text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold"
+                />
+                {searchName && (
                   <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedEditItemId(null);
-                      setItemName('');
-                      setBarcode('');
-                      setCategory('');
-                      setMainUnit('حبة');
-                      setHasSubUnit(false);
-                      setSubUnitName('');
-                      setPurchasePrice(0);
-                      setSalePrice(0);
-                      setSubUnitSalePrice(0);
-                    }}
-                    className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-700 dark:text-slate-300 font-bold px-3 py-2.5 rounded-xl text-sm"
+                    onClick={() => setSearchName('')}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                   >
-                    إلغاء
+                    <X size={12} />
                   </button>
                 )}
               </div>
-            </form>
+
+              {/* 2. Barcode Search */}
+              <div className="relative">
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold pointer-events-none">الباركود:</span>
+                <input
+                  type="text"
+                  value={searchBarcode}
+                  onChange={(e) => setSearchBarcode(e.target.value)}
+                  placeholder="ابحث بالرمز أو امسح الباركود..."
+                  className="w-full pr-14 pl-8 py-2 rounded-xl glass-input text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono font-bold"
+                />
+                {searchBarcode && (
+                  <button
+                    onClick={() => setSearchBarcode('')}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* 3. Category Search */}
+              <div className="relative">
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold pointer-events-none">التصنيف:</span>
+                <input
+                  type="text"
+                  value={searchCategory}
+                  onChange={(e) => setSearchCategory(e.target.value)}
+                  placeholder="اسم القسم أو الفئة..."
+                  className="w-full pr-14 pl-8 py-2 rounded-xl glass-input text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold"
+                />
+                {searchCategory && (
+                  <button
+                    onClick={() => setSearchCategory('')}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* 4. Dynamic Low Stock Custom Threshold Filter */}
+              <div className="relative flex items-center gap-1.5 justify-end">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0 whitespace-nowrap">عتبة النواقص ⚠️:</span>
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    value={lowStockThreshold}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setLowStockThreshold(val === '' ? '' : Number(val));
+                    }}
+                    placeholder="افتراضي"
+                    min="0"
+                    className="w-full px-2 py-1.5 rounded-xl glass-input text-center text-xs text-rose-600 dark:text-rose-400 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-rose-500 font-bold"
+                    title="تعديل قيمة الحد الأدنى لتصفية النواقص ديناميكياً بدلاً من التنبيه الافتراضي لكل صنف"
+                  />
+                  {lowStockThreshold !== '' && (
+                    <button
+                      onClick={() => setLowStockThreshold('')}
+                      type="button"
+                      className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 cursor-pointer"
+                      title="الرجوع للحدود الافتراضية"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Category Filter Pills (Dynamic list) */}
+            <div className="border-t border-slate-100 dark:border-slate-800/80 pt-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
+              <span className="text-xs font-bold text-slate-400 dark:text-slate-500 whitespace-nowrap flex items-center gap-1">
+                <Filter size={12} /> أقسام المخازن:
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('all')}
+                className={`px-3 py-1.5 rounded-full text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
+                  selectedCategory === 'all'
+                    ? 'bg-emerald-500 text-white shadow-sm'
+                    : 'bg-slate-500/5 hover:bg-slate-500/10 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
+                }`}
+              >
+                الكل ({items.length})
+              </button>
+              {categories.map(cat => {
+                const count = items.filter(i => (i.category || 'عام') === cat).length;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
+                      selectedCategory === cat
+                        ? 'bg-emerald-500 text-white shadow-sm'
+                        : 'bg-slate-500/5 hover:bg-slate-500/10 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    {cat} ({count})
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Items Inventory Table */}
-          <div className="xl:col-span-8 rounded-2xl glass-panel-card border border-white/25 p-5 shadow-md flex flex-col space-y-4">
+          <div className="rounded-2xl glass-panel-card border border-white/25 p-5 shadow-md flex flex-col space-y-4">
             <h3 className="font-bold text-md text-slate-800 dark:text-slate-100 flex justify-between items-center">
-              <span>قائمة جرد وتوفر الأصناف</span>
+              <span>جدول الأصناف والمخزون</span>
               <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-normal px-2.5 py-1 rounded-full">
-                إجمالي الأصناف: {items.length}
+                تم العثور على: {filteredItems.length} صنف
               </span>
             </h3>
 
@@ -597,46 +666,63 @@ export default function Inventory({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {items.map(item => {
-                    const stock = getTotalStockQty(item.id);
-                    const isLowStock = stock <= item.minStockAlert;
-                    
-                    return (
-                      <tr key={item.id} className="text-slate-900 dark:text-white hover:bg-slate-500/5 transition">
-                        <td className="py-3 pr-2">
-                          <div className="font-semibold flex items-center gap-1.5">
-                            {item.name}
-                            {isLowStock && (
-                              <span className="text-red-500 inline-block" title="المخزون قارب على النفاد!">
-                                <AlertTriangle size={14} />
+                  {filteredItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-10 text-center text-slate-400 dark:text-slate-500">
+                        لا توجد أصناف مطابقة لخيارات البحث والتصفية المحددة.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredItems.map(item => {
+                      const stock = getTotalStockQty(item.id);
+                      const isLowStock = stock <= item.minStockAlert;
+                      
+                      return (
+                        <tr key={item.id} className="text-slate-900 dark:text-white hover:bg-slate-500/5 transition">
+                          <td className="py-3 pr-2">
+                            <div className="font-semibold flex items-center gap-1.5">
+                              <span 
+                                onClick={() => {
+                                  setSelectedLedgerItemId(item.id);
+                                  handleTabChange('ledger');
+                                }}
+                                className="hover:text-emerald-500 dark:hover:text-emerald-400 cursor-pointer transition"
+                                title="اضغط لفتح كشف حركات الصنف بالكامل 🔍"
+                              >
+                                {item.name}
                               </span>
+                              {isLowStock && (
+                                <span className="text-rose-500 inline-block animate-pulse" title="المخزون قارب على النفاد!">
+                                  <AlertTriangle size={14} />
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-500 font-mono">الرمز: {item.barcode}</div>
+                          </td>
+                          <td className="py-3 text-slate-600 dark:text-slate-400">{item.category || 'عام'}</td>
+                          <td className="py-3 text-center text-xs">
+                            <div>الكبرى ({item.mainUnit}): <strong className="font-mono text-emerald-600 dark:text-emerald-400">{(item.salePrice / currency.exchangeRate).toFixed(2)} {currency.symbol}</strong> {!currency.isBase && <span className="text-[10px] text-slate-500">({item.salePrice} شيكل)</span>}</div>
+                            {item.hasSubUnit && (
+                              <div className="text-slate-500">الصغيرة ({item.subUnitName}): <strong className="font-mono text-sky-600 dark:text-sky-400">{((item.subUnitSalePrice || (item.salePrice / (item.conversionRate || 1))) / currency.exchangeRate).toFixed(2)} {currency.symbol}</strong> {!currency.isBase && <span className="text-[10px] text-slate-400">({(item.subUnitSalePrice || (item.salePrice / (item.conversionRate || 1))).toFixed(2)} شيكل)</span>}</div>
                             )}
-                          </div>
-                          <div className="text-xs text-slate-500 font-mono">الرمز: {item.barcode}</div>
-                        </td>
-                        <td className="py-3 text-slate-600 dark:text-slate-400">{item.category || 'عام'}</td>
-                        <td className="py-3 text-center text-xs">
-                          <div>الكبرى ({item.mainUnit}): <strong className="font-mono text-emerald-600 dark:text-emerald-400">{(item.salePrice / currency.exchangeRate).toFixed(2)} {currency.symbol}</strong> {!currency.isBase && <span className="text-[10px] text-slate-500">({item.salePrice} شيكل)</span>}</div>
-                          {item.hasSubUnit && (
-                            <div className="text-slate-500">الصغيرة ({item.subUnitName}): <strong className="font-mono text-sky-600 dark:text-sky-400">{((item.subUnitSalePrice || (item.salePrice / (item.conversionRate || 1))) / currency.exchangeRate).toFixed(2)} {currency.symbol}</strong> {!currency.isBase && <span className="text-[10px] text-slate-400">({(item.subUnitSalePrice || (item.salePrice / (item.conversionRate || 1))).toFixed(2)} شيكل)</span>}</div>
-                          )}
-                        </td>
-                        <td className="py-3 text-center">
-                          <span className={`font-bold font-mono text-sm px-2 py-1 rounded-lg ${isLowStock ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}>
-                            {formatStockQty(item, stock)}
-                          </span>
-                        </td>
-                        <td className="py-3 text-left pl-2">
-                          <button
-                            onClick={() => handleEditItem(item)}
-                            className="text-emerald-500 hover:text-emerald-600 font-bold text-xs"
-                          >
-                            تعديل
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+                          <td className="py-3 text-center">
+                            <span className={`font-bold font-mono text-sm px-2.5 py-1 rounded-lg ${isLowStock ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-500/20' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}>
+                              {formatStockQty(item, stock)}
+                            </span>
+                          </td>
+                          <td className="py-3 text-left pl-2">
+                            <button
+                              onClick={() => handleEditItem(item)}
+                              className="text-emerald-500 hover:text-emerald-600 font-bold text-xs cursor-pointer"
+                            >
+                              تعديل
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -646,73 +732,38 @@ export default function Inventory({
 
       {/* 2. TAB: BRANCHES MANAGEMENT */}
       {activeTab === 'branches' && (
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-          <div className="md:col-span-4 rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
-            <h3 className="font-bold text-md text-slate-800 dark:text-slate-100 flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <MapPin size={18} className="text-emerald-500" /> 
-                {selectedEditBranchId ? 'تعديل المستودع / الفرع' : 'إضافة مستودع أو فرع جديد'}
-              </span>
-              {selectedEditBranchId && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedEditBranchId(null);
-                    setBranchName('');
-                    setBranchLocation('');
-                  }}
-                  className="text-xs font-bold text-red-500 hover:underline cursor-pointer"
-                >
-                  إلغاء التعديل
-                </button>
-              )}
-            </h3>
-            <form onSubmit={handleAddBranchSubmit} className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">اسم الفرع / المستودع</label>
-                <input
-                  type="text"
-                  value={branchName}
-                  onChange={(e) => setBranchName(e.target.value)}
-                  placeholder="مثال: معرض الرمال، مخازن الوسطى"
-                  className="w-full p-2.5 rounded-xl glass-input text-sm text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  required
-                />
+        <div className="space-y-5 animate-in fade-in duration-200">
+          <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800/80">
+              <div>
+                <h3 className="font-bold text-md text-slate-800 dark:text-slate-100">الفروع والمستودعات المعتمدة وتوفر البضائع</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">إدارة مستودعات ومنافذ توزيع غزة كاش</p>
               </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">العنوان أو الوصف الجغرافي</label>
-                <input
-                  type="text"
-                  value={branchLocation}
-                  onChange={(e) => setBranchLocation(e.target.value)}
-                  placeholder="مثال: غزة، شارع الوحدة"
-                  className="w-full p-2.5 rounded-xl glass-input text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                />
-              </div>
-
               <button
-                type="submit"
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded-xl text-sm shadow transition cursor-pointer"
+                onClick={() => {
+                  setSelectedEditBranchId(null);
+                  setBranchName('');
+                  setBranchLocation('');
+                  setIsBranchModalOpen(true);
+                }}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-md cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
               >
-                {selectedEditBranchId ? 'تعديل المستودع' : 'حفظ المستودع'}
+                <Plus size={16} />
+                <span>إضافة مستودع / فرع جديد</span>
               </button>
-            </form>
-          </div>
+            </div>
 
-          <div className="md:col-span-8 rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
-            <h3 className="font-bold text-md text-slate-800 dark:text-slate-100">الفروع والمستودعات المعتمدة وتوفر البضائع</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
               {branches.map(b => {
                 const bStock = branchStock.filter(s => s.branchId === b.id);
                 const distinctItemsCount = bStock.filter(s => s.quantity > 0).length;
                 
                 return (
-                  <div key={b.id} className="p-4 rounded-xl glass-panel border border-slate-100 dark:border-slate-800 space-y-2">
+                  <div key={b.id} className="p-4 rounded-xl glass-panel border border-slate-100 dark:border-slate-800 space-y-3 shadow-sm hover:shadow-md transition-all duration-300">
                     <div className="flex items-start justify-between">
                       <div>
                         <h4 className="font-bold text-slate-950 dark:text-white text-base">{b.name}</h4>
-                        <p className="text-xs text-slate-500">{b.location}</p>
+                        <p className="text-xs text-slate-500">{b.location || 'لا يوجد موقع جغرافي محدد'}</p>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <button
@@ -727,9 +778,9 @@ export default function Inventory({
                         </span>
                       </div>
                     </div>
-                    <div className="border-t border-slate-100 dark:border-slate-800/80 pt-2 flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                    <div className="border-t border-slate-100 dark:border-slate-800/80 pt-2.5 flex justify-between text-xs text-slate-600 dark:text-slate-400">
                       <span>الأصناف المتوفرة بالفرع:</span>
-                      <strong className="font-mono">{distinctItemsCount} صنف</strong>
+                      <strong className="font-mono text-emerald-600 dark:text-emerald-400">{distinctItemsCount} صنف</strong>
                     </div>
                   </div>
                 );
@@ -741,132 +792,69 @@ export default function Inventory({
 
       {/* 3. TAB: STOCK TRANSFERS */}
       {activeTab === 'transfers' && (
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-          <div className="md:col-span-4 rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
-            <h3 className="font-bold text-md text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-              <ArrowRightLeft size={18} className="text-emerald-500" /> نموذج تحويل البضائع
-            </h3>
-            
-            <form onSubmit={handleTransferSubmit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">مستودع المصدر (من)</label>
-                  <select
-                    value={fromBranch}
-                    onChange={(e) => setFromBranch(e.target.value)}
-                    className="w-full p-2 rounded-xl glass-input text-xs text-slate-900 dark:text-white font-medium"
-                    required
-                  >
-                    <option value="">-- اختر --</option>
-                    {branches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">مستودع الوجهة (إلى)</label>
-                  <select
-                    value={toBranch}
-                    onChange={(e) => setToBranch(e.target.value)}
-                    className="w-full p-2 rounded-xl glass-input text-xs text-slate-900 dark:text-white font-medium"
-                    required
-                  >
-                    <option value="">-- اختر --</option>
-                    {branches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
+        <div className="space-y-5 animate-in fade-in duration-200">
+          <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800/80">
+              <div>
+                <h3 className="font-bold text-md text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                  <RefreshCw size={18} className="text-emerald-500" /> سجل حركات التحويل المخزني
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">متابعة وتدقيق سندات نقل البضائع بين الفروع والمخازن</p>
               </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">اختر الصنف المراد نقله</label>
-                <select
-                  value={transferItemId}
-                  onChange={(e) => setTransferItemId(e.target.value)}
-                  className="w-full p-2.5 rounded-xl glass-input text-sm text-slate-900 dark:text-white font-medium"
-                  required
-                >
-                  <option value="">-- ابحث واختر الصنف --</option>
-                  {items.map(item => {
-                    const sourceStock = fromBranch ? getBranchStockQty(item.id, fromBranch) : 0;
-                    return (
-                      <option key={item.id} value={item.id} disabled={sourceStock <= 0}>
-                        {item.name} {fromBranch ? `(المتوفر بالمصدر: ${sourceStock} ${item.mainUnit})` : ''}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">الكمية المراد تحويلها (بالوحدة الكبرى)</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={transferQty || ''}
-                  onChange={(e) => setTransferQty(+e.target.value)}
-                  placeholder="0"
-                  className="w-full p-2.5 rounded-xl glass-input text-sm font-bold font-mono text-slate-900 dark:text-white"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">ملاحظات التحويل</label>
-                <textarea
-                  value={transferNotes}
-                  onChange={(e) => setTransferNotes(e.target.value)}
-                  placeholder="مثال: نقل كرتونة لوجود طلب..."
-                  className="w-full p-2 rounded-xl glass-input text-xs h-16 resize-none"
-                />
-              </div>
-
               <button
-                type="submit"
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-sm shadow transition"
+                onClick={() => {
+                  setFromBranch('');
+                  setToBranch('');
+                  setTransferItemId('');
+                  setTransferQty(0);
+                  setTransferNotes('');
+                  setIsTransferModalOpen(true);
+                }}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-md cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
               >
-                تسجيل وتحويل الكمية
+                <ArrowRightLeft size={16} />
+                <span>إجراء تحويل مخزني جديد</span>
               </button>
-            </form>
-          </div>
-
-          <div className="md:col-span-8 rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
-            <h3 className="font-bold text-md text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-              <RefreshCw size={16} className="text-emerald-500" /> سجل حركات التحويل المخزني
-            </h3>
+            </div>
             
-            <div className="overflow-x-auto no-scrollbar max-h-[400px]">
+            <div className="overflow-x-auto no-scrollbar max-h-[500px]">
               <table className="w-full text-right text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
-                    <th className="pb-2">رقم السند والتاريخ</th>
-                    <th className="pb-2">من مستودع</th>
-                    <th className="pb-2">إلى مستودع</th>
-                    <th className="pb-2">الأصناف والكمية</th>
-                    <th className="pb-2 pl-2">ملاحظات</th>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 font-bold">
+                    <th className="pb-3 pr-2">رقم السند والتاريخ</th>
+                    <th className="pb-3">من مستودع</th>
+                    <th className="pb-3">إلى مستودع</th>
+                    <th className="pb-3">الأصناف والكمية</th>
+                    <th className="pb-3 pl-2">ملاحظات التحويل</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {movements.filter(m => m.type === 'transfer_out').map(mov => {
-                    // Match corresponding transfer in
-                    const matchingIn = movements.find(x => x.referenceNo === mov.referenceNo && x.type === 'transfer_in');
-                    return (
-                      <tr key={mov.id} className="text-slate-900 dark:text-white hover:bg-slate-500/5 py-2">
-                        <td className="py-2.5">
-                          <div className="font-bold">{mov.referenceNo}</div>
-                          <div className="text-[10px] text-slate-500">{new Date(mov.date).toLocaleString('ar-EG')}</div>
-                        </td>
-                        <td className="py-2.5 text-red-600 font-medium">{mov.branchName}</td>
-                        <td className="py-2.5 text-emerald-600 font-medium">{matchingIn ? matchingIn.branchName : 'وجهة مجهولة'}</td>
-                        <td className="py-2.5 font-bold">
-                          {mov.itemName} ({Math.abs(mov.quantityChange)} {mov.unitName})
-                        </td>
-                        <td className="py-2.5 pl-2 text-slate-500">{mov.description}</td>
-                      </tr>
-                    );
-                  })}
+                  {movements.filter(m => m.type === 'transfer_out').length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-10 text-center text-slate-400 dark:text-slate-500">
+                        لا توجد عمليات تحويل مخزني مسجلة حتى الآن.
+                      </td>
+                    </tr>
+                  ) : (
+                    movements.filter(m => m.type === 'transfer_out').map(mov => {
+                      // Match corresponding transfer in
+                      const matchingIn = movements.find(x => x.referenceNo === mov.referenceNo && x.type === 'transfer_in');
+                      return (
+                        <tr key={mov.id} className="text-slate-900 dark:text-white hover:bg-slate-500/5 py-2">
+                          <td className="py-2.5 pr-2">
+                            <div className="font-bold text-slate-800 dark:text-slate-200">{mov.referenceNo}</div>
+                            <div className="text-[10px] text-slate-500">{new Date(mov.date).toLocaleString('ar-EG')}</div>
+                          </td>
+                          <td className="py-2.5 text-rose-500 font-bold">{mov.branchName}</td>
+                          <td className="py-2.5 text-emerald-500 font-bold">{matchingIn ? matchingIn.branchName : 'وجهة مجهولة'}</td>
+                          <td className="py-2.5 font-extrabold text-slate-950 dark:text-white">
+                            {mov.itemName} <span className="font-mono text-emerald-600 dark:text-emerald-400">({Math.abs(mov.quantityChange)} {mov.unitName})</span>
+                          </td>
+                          <td className="py-2.5 pl-2 text-slate-500 dark:text-slate-400">{mov.description || '-'}</td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -916,7 +904,10 @@ export default function Inventory({
 
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={() => {
+                  (window as any)._printTargetSelector = '.print-report-wrapper';
+                  window.print();
+                }}
                 className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow cursor-pointer"
               >
                 طباعة الكشف
@@ -926,7 +917,7 @@ export default function Inventory({
 
           {/* Ledger Table Print View & Screen View */}
           {ledgerItem ? (
-            <div className="space-y-4">
+            <div className="print-report-wrapper space-y-4 bg-white dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-800">
               <div className="flex justify-between items-end border-b border-slate-200 dark:border-slate-800 pb-3">
                 <div>
                   <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">كشف حركة الصنف</span>
@@ -1088,7 +1079,7 @@ export default function Inventory({
                 onClick={() => {
                   const el = document.getElementById('excel_paste_area') as HTMLTextAreaElement;
                   if (!el || !el.value.trim()) {
-                    alert('يرجى لصق بيانات صالحة أولاً.');
+                    toast('يرجى لصق بيانات صالحة أولاً.', 'warning');
                     return;
                   }
                   handleImportProcess(el.value);
@@ -1316,7 +1307,7 @@ export default function Inventory({
                             onClick={() => {
                               if (!onAdjustStock) return;
                               onAdjustStock(item.id, adjustBranchId, actualQty, adjustNotes[item.id] || 'تسوية جرد يدوي منفرد');
-                              alert(`تم تعديل وتسوية صنف "${item.name}" بنجاح!`);
+                              toast(`تم تعديل وتسوية صنف "${item.name}" بنجاح! 👍`, 'success');
                               const pc = { ...physicalCounts };
                               delete pc[item.id];
                               setPhysicalCounts(pc);
@@ -1348,6 +1339,363 @@ export default function Inventory({
             >
               <Save size={15} /> اعتماد وحفظ جميع تسويات الجرد المحددة
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* ================= MODAL DIALOGS ========================= */}
+      {/* ========================================================= */}
+
+      {/* 1. Add / Edit Item Modal */}
+      {isItemModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl flex flex-col space-y-4 animate-in zoom-in-95 duration-200 relative my-8 text-right" dir="rtl">
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => setIsItemModalOpen(false)}
+              className="absolute top-4 left-4 p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-all cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+
+            <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3 pl-8">
+              <Package size={22} className="text-emerald-500" />
+              <span>{selectedEditItemId ? 'تعديل بيانات الصنف' : 'إضافة صنف جديد للمخزن'}</span>
+            </h3>
+
+            <form onSubmit={handleAddItemSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2 space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">اسم الصنف التجاري</label>
+                  <input
+                    type="text"
+                    value={itemName}
+                    onChange={(e) => setItemName(e.target.value)}
+                    placeholder="مثال: أرز الياسمين 5 كيلو"
+                    className="w-full p-2.5 rounded-xl glass-input text-sm text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">الباركود (رمز الاستجابة)</label>
+                  <input
+                    type="text"
+                    value={barcode}
+                    onChange={(e) => setBarcode(e.target.value)}
+                    placeholder="امسح أو اكتب الرمز"
+                    className="w-full p-2.5 rounded-xl glass-input text-sm font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">التصنيف / القسم</label>
+                  <input
+                    type="text"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    placeholder="مثال: مواد غذائية"
+                    className="w-full p-2.5 rounded-xl glass-input text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* Unit Configuration */}
+              <div className="bg-slate-500/5 rounded-xl p-4 border border-white/10 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">الوحدة الأساسية الكبرى</label>
+                    <input
+                      type="text"
+                      value={mainUnit}
+                      onChange={(e) => setMainUnit(e.target.value)}
+                      placeholder="كرتونة، شوال، صندوق"
+                      className="w-full p-2.5 rounded-xl glass-input text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center gap-2 pt-6">
+                    <input
+                      type="checkbox"
+                      id="hasSubUnit"
+                      checked={hasSubUnit}
+                      onChange={(e) => setHasSubUnit(e.target.checked)}
+                      className="w-4 h-4 text-emerald-500 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <label htmlFor="hasSubUnit" className="text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer select-none">يحتوي وحدة صغيرة مجزأة</label>
+                  </div>
+                </div>
+
+                {hasSubUnit && (
+                  <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">اسم الوحدة الصغيرة</label>
+                      <input
+                        type="text"
+                        value={subUnitName}
+                        onChange={(e) => setSubUnitName(e.target.value)}
+                        placeholder="حبة، علبة، كيلو"
+                        className="w-full p-2.5 rounded-xl glass-input text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        required={hasSubUnit}
+                      />
+                    </div>
+                    
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">معدل التعبئة (التحويل)</label>
+                      <input
+                        type="number"
+                        value={conversionRate}
+                        onChange={(e) => setConversionRate(Math.max(1, +e.target.value))}
+                        className="w-full p-2.5 rounded-xl glass-input text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        required={hasSubUnit}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Cost and Pricing */}
+              <div className="grid grid-cols-2 gap-4 bg-emerald-500/5 dark:bg-emerald-500/5 rounded-xl p-4 border border-emerald-500/10">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-emerald-700 dark:text-emerald-400">سعر شراء الكبرى</label>
+                  <input
+                    type="number"
+                    value={purchasePrice}
+                    onChange={(e) => setPurchasePrice(Math.max(0, +e.target.value))}
+                    className="w-full p-2.5 rounded-xl glass-input text-xs font-bold font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-emerald-700 dark:text-emerald-400">سعر بيع الكبرى</label>
+                  <input
+                    type="number"
+                    value={salePrice}
+                    onChange={(e) => setSalePrice(Math.max(0, +e.target.value))}
+                    className="w-full p-2.5 rounded-xl glass-input text-xs font-bold font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+
+                {hasSubUnit && (
+                  <div className="col-span-2 space-y-1.5 border-t border-emerald-500/10 pt-2">
+                    <label className="text-xs font-bold text-emerald-700 dark:text-emerald-400">سعر بيع الوحدة الصغيرة (المقترح: {(salePrice / (conversionRate || 1)).toFixed(2)})</label>
+                    <input
+                      type="number"
+                      value={subUnitSalePrice}
+                      onChange={(e) => setSubUnitSalePrice(Math.max(0, +e.target.value))}
+                      className="w-full p-2.5 rounded-xl glass-input text-xs font-bold font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Alert limits */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">حد الطلب (تنبيه قرب نفاد الصنف في المستودع)</label>
+                <input
+                  type="number"
+                  value={minStockAlert}
+                  onChange={(e) => setMinStockAlert(Math.max(0, +e.target.value))}
+                  className="w-full p-2.5 rounded-xl glass-input text-sm font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold py-3 rounded-xl text-sm shadow transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:scale-[1.01] active:scale-[0.99]"
+                >
+                  <Save size={16} /> <span>{selectedEditItemId ? 'حفظ التحديثات' : 'إضافة الصنف الجديد'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsItemModalOpen(false)}
+                  className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-extrabold px-6 py-3 rounded-xl text-sm cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Add / Edit Branch Modal */}
+      {isBranchModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl flex flex-col space-y-4 animate-in zoom-in-95 duration-200 relative text-right" dir="rtl">
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => setIsBranchModalOpen(false)}
+              className="absolute top-4 left-4 p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-all cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+
+            <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3 pl-8">
+              <MapPin size={22} className="text-emerald-500" />
+              <span>{selectedEditBranchId ? 'تعديل بيانات المستودع / الفرع' : 'إضافة مستودع أو فرع جديد'}</span>
+            </h3>
+
+            <form onSubmit={handleAddBranchSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">اسم الفرع / المستودع التجاري</label>
+                <input
+                  type="text"
+                  value={branchName}
+                  onChange={(e) => setBranchName(e.target.value)}
+                  placeholder="مثال: معرض الرمال، مخازن الوسطى"
+                  className="w-full p-2.5 rounded-xl glass-input text-sm text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">الموقع الجغرافي أو الوصف</label>
+                <input
+                  type="text"
+                  value={branchLocation}
+                  onChange={(e) => setBranchLocation(e.target.value)}
+                  placeholder="مثال: غزة، شارع الوحدة، مقابل بنك فلسطين"
+                  className="w-full p-2.5 rounded-xl glass-input text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold py-3 rounded-xl text-sm shadow transition-all cursor-pointer"
+                >
+                  {selectedEditBranchId ? 'حفظ التحديثات' : 'إضافة المستودع'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsBranchModalOpen(false)}
+                  className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-extrabold px-6 py-3 rounded-xl text-sm cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Stock Transfer Modal */}
+      {isTransferModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl flex flex-col space-y-4 animate-in zoom-in-95 duration-200 relative text-right" dir="rtl">
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => setIsTransferModalOpen(false)}
+              className="absolute top-4 left-4 p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-all cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+
+            <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3 pl-8">
+              <ArrowRightLeft size={22} className="text-emerald-500" />
+              <span>إجراء تحويل بضائع جديد بين الفروع</span>
+            </h3>
+
+            <form onSubmit={handleTransferSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">مستودع المصدر (من)</label>
+                  <select
+                    value={fromBranch}
+                    onChange={(e) => setFromBranch(e.target.value)}
+                    className="w-full p-2.5 rounded-xl glass-input text-xs text-slate-900 dark:text-white font-medium"
+                    required
+                  >
+                    <option value="">-- اختر --</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">مستودع الوجهة (إلى)</label>
+                  <select
+                    value={toBranch}
+                    onChange={(e) => setToBranch(e.target.value)}
+                    className="w-full p-2.5 rounded-xl glass-input text-xs text-slate-900 dark:text-white font-medium"
+                    required
+                  >
+                    <option value="">-- اختر --</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">اختر الصنف المراد نقله</label>
+                <select
+                  value={transferItemId}
+                  onChange={(e) => setTransferItemId(e.target.value)}
+                  className="w-full p-2.5 rounded-xl glass-input text-sm text-slate-900 dark:text-white font-medium"
+                  required
+                >
+                  <option value="">-- ابحث واختر الصنف --</option>
+                  {items.map(item => {
+                    const sourceStock = fromBranch ? getBranchStockQty(item.id, fromBranch) : 0;
+                    return (
+                      <option key={item.id} value={item.id} disabled={sourceStock <= 0}>
+                        {item.name} {fromBranch ? `(المتوفر بالمصدر: ${sourceStock} ${item.mainUnit})` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">الكمية المراد تحويلها (بالوحدة الكبرى)</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={transferQty || ''}
+                  onChange={(e) => setTransferQty(+e.target.value)}
+                  placeholder="0"
+                  className="w-full p-2.5 rounded-xl glass-input text-sm font-bold font-mono text-slate-900 dark:text-white"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">ملاحظات التحويل</label>
+                <textarea
+                  value={transferNotes}
+                  onChange={(e) => setTransferNotes(e.target.value)}
+                  placeholder="مثال: نقل لتلبية طلب مستعجل للعملاء..."
+                  className="w-full p-2.5 rounded-xl glass-input text-xs h-20 resize-none"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold py-3 rounded-xl text-sm shadow transition"
+                >
+                  تسجيل وتحويل الكمية
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsTransferModalOpen(false)}
+                  className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-extrabold px-6 py-3 rounded-xl text-sm cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

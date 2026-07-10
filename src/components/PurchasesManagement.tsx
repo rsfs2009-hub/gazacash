@@ -51,6 +51,15 @@ export default function PurchasesManagement({
   onSavePurchaseReturn
 }: PurchasesManagementProps) {
   
+  // Helper for dynamic premium toasts
+  const toast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success') => {
+    if ((window as any).showToast) {
+      (window as any).showToast(message, type);
+    } else {
+      alert(message);
+    }
+  };
+
   // Tab states: 'purchases' | 'returns'
   const [activeSubTab, setActiveSubTab] = useState<'purchases' | 'returns'>('purchases');
 
@@ -265,12 +274,12 @@ export default function PurchasesManagement({
     e.preventDefault();
     if (!editingPurchase) return;
     if (editingPurchase.items.length === 0) {
-      alert('السند لا يحتوي على أصناف!');
+      toast('السند لا يحتوي على أصناف!', 'warning');
       return;
     }
     onUpdatePurchase(editingPurchase.id, editingPurchase);
     setEditingPurchase(null);
-    alert('تم تعديل وتصحيح فاتورة الشراء بنجاح وتحديث الكميات والأرصدة في المخزن!');
+    toast('تم تعديل وتصحيح فاتورة الشراء بنجاح وتحديث الكميات والأرصدة في المخزن! 📦', 'success');
   };
 
   // --- Handlers for Purchase Return ---
@@ -314,11 +323,11 @@ export default function PurchasesManagement({
   const handleSubmitNewReturn = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newReturnSupplierId) {
-      alert('الرجاء اختيار المورد أولاً');
+      toast('الرجاء اختيار المورد أولاً', 'warning');
       return;
     }
     if (newReturnCart.length === 0) {
-      alert('الرجاء إضافة أصناف للمرتجع');
+      toast('الرجاء إضافة أصناف للمرتجع', 'warning');
       return;
     }
 
@@ -351,7 +360,7 @@ export default function PurchasesManagement({
     setNewReturnOriginalInvoice('');
     setNewReturnCart([]);
     setShowAddReturn(false);
-    alert('تم تسجيل سند مرتجع المشتريات وإخراج الكميات من المستودع وتخفيض رصيد المورد بنجاح!');
+    toast('تم تسجيل سند مرتجع المشتريات وإخراج الكميات من المستودع وتخفيض رصيد المورد بنجاح! 🔄', 'success');
   };
 
   // --- Edit Return Handlers ---
@@ -445,18 +454,18 @@ export default function PurchasesManagement({
     e.preventDefault();
     if (!editingReturn) return;
     if (editingReturn.items.length === 0) {
-      alert('السند لا يحتوي على أصناف!');
+      toast('السند لا يحتوي على أصناف!', 'warning');
       return;
     }
     onUpdatePurchaseReturn(editingReturn.id, editingReturn);
     setEditingReturn(null);
-    alert('تم تعديل وتصحيح سند مرتجع المشتريات بنجاح وتحديث الحسابات والمستودعات!');
+    toast('تم تعديل وتصحيح سند مرتجع المشتريات بنجاح وتحديث الحسابات والمستودعات! 🔄', 'success');
   };
 
   // --- Delete Handler ---
   const handleTriggerDelete = (id: string, no: string, type: 'purchase' | 'return') => {
     if (userRole === 'cashier') {
-      alert('🔒 عذراً! صلاحيات الحساب الحالي لا تسمح بحذف المستندات والعمليات المالية المؤرشفة. يرجى المراجعة كمدير للنظام.');
+      toast('🔒 عذراً! صلاحيات الحساب الحالي لا تسمح بحذف المستندات والعمليات المالية المؤرشفة. يرجى المراجعة كمدير للنظام.', 'error');
       return;
     }
     setDeletingInvoice({ id, no, type });
@@ -471,7 +480,7 @@ export default function PurchasesManagement({
       onDeletePurchaseReturn(deletingInvoice.id, deleteReason);
     }
     setDeletingInvoice(null);
-    alert('تم إلغاء وحذف السند المالي بنجاح وإعادة رصيد المستودعات والذمم المالية للحالة السابقة.');
+    toast('تم إلغاء وحذف السند المالي بنجاح وإعادة رصيد المستودعات والذمم المالية للحالة السابقة. 🗑️', 'success');
   };
 
   return (

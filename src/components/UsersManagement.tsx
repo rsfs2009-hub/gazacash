@@ -5,17 +5,28 @@ import { Shield, Key, UserPlus, Trash2, Edit3, Check, X, ShieldAlert, Lock, Unlo
 interface UsersManagementProps {
   users: UserAccount[];
   currentUserRole: 'admin' | 'cashier';
+  currentUserCanManageUsers: boolean;
   onUpdateUsers: (updatedUsers: UserAccount[]) => void;
 }
 
 export const UsersManagement: React.FC<UsersManagementProps> = ({
   users = [],
   currentUserRole,
+  currentUserCanManageUsers,
   onUpdateUsers,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserAccount | null>(null);
+
+  // Helper for dynamic premium toasts
+  const toast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success') => {
+    if ((window as any).showToast) {
+      (window as any).showToast(message, type);
+    } else {
+      alert(message);
+    }
+  };
 
   // Form states
   const [name, setName] = useState('');
@@ -33,8 +44,8 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({
 
   // Open add user modal
   const handleOpenAdd = () => {
-    if (currentUserRole !== 'admin') {
-      alert('🔒 عذراً! صلاحية إدارة المستخدمين وتغيير كلمات المرور مقتصرة فقط على "مدير النظام".');
+    if (!currentUserCanManageUsers) {
+      toast('🔒 عذراً! صلاحية إدارة المستخدمين وتغيير كلمات المرور مقتصرة فقط على الموظفين المخولين بذلك.', 'error');
       return;
     }
     setName('');
@@ -51,8 +62,8 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({
 
   // Open edit user modal
   const handleOpenEdit = (user: UserAccount) => {
-    if (currentUserRole !== 'admin') {
-      alert('🔒 عذراً! صلاحية إدارة المستخدمين وتغيير كلمات المرور مقتصرة فقط على "مدير النظام".');
+    if (!currentUserCanManageUsers) {
+      toast('🔒 عذراً! صلاحية إدارة المستخدمين وتغيير كلمات المرور مقتصرة فقط على الموظفين المخولين بذلك.', 'error');
       return;
     }
     setSelectedUser(user);
@@ -72,13 +83,13 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({
   const handleAddUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !username.trim() || !password.trim()) {
-      alert('يرجى ملء جميع الحقول المطلوبة!');
+      toast('يرجى ملء جميع الحقول المطلوبة!', 'warning');
       return;
     }
 
     const usernameExists = users.some(u => u.username.toLowerCase() === username.trim().toLowerCase());
     if (usernameExists) {
-      alert('اسم المستخدم هذا موجود مسبقاً! يرجى اختيار اسم مستخدم آخر.');
+      toast('اسم المستخدم هذا موجود مسبقاً! يرجى اختيار اسم مستخدم آخر.', 'error');
       return;
     }
 
@@ -99,6 +110,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({
 
     onUpdateUsers([...users, newUser]);
     setShowAddModal(false);
+    toast('تمت إضافة الموظف الجديد بنجاح! 🎉', 'success');
   };
 
   // Save Edited User
@@ -107,7 +119,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({
     if (!selectedUser) return;
 
     if (!name.trim() || !username.trim() || !password.trim()) {
-      alert('يرجى ملء جميع الحقول المطلوبة!');
+      toast('يرجى ملء جميع الحقول المطلوبة!', 'warning');
       return;
     }
 
@@ -116,7 +128,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({
       u => u.id !== selectedUser.id && u.username.toLowerCase() === username.trim().toLowerCase()
     );
     if (usernameExists) {
-      alert('اسم المستخدم هذا موجود مسبقاً! يرجى اختيار اسم مستخدم آخر.');
+      toast('اسم المستخدم هذا موجود مسبقاً! يرجى اختيار اسم مستخدم آخر.', 'error');
       return;
     }
 
@@ -143,22 +155,24 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({
     onUpdateUsers(updatedUsers);
     setShowEditModal(false);
     setSelectedUser(null);
+    toast('تم حفظ تعديلات حساب وصلاحيات الموظف بنجاح! 💾', 'success');
   };
 
   // Delete User
   const handleDeleteUser = (userId: string, userName: string) => {
-    if (currentUserRole !== 'admin') {
-      alert('🔒 عذراً! صلاحية مسح المستخدمين مقتصرة فقط على "مدير النظام".');
+    if (!currentUserCanManageUsers) {
+      toast('🔒 عذراً! صلاحية مسح المستخدمين مقتصرة فقط على الموظفين المخولين بذلك.', 'error');
       return;
     }
 
     if (userId === 'user_admin') {
-      alert('🚫 لا يمكن حذف حساب مدير النظام الافتراضي لضمان عدم قفل النظام!');
+      toast('🚫 لا يمكن حذف حساب مدير النظام الافتراضي لضمان عدم قفل النظام!', 'warning');
       return;
     }
 
     if (window.confirm(`هل أنت متأكد من رغبتك في حذف حساب الموظف "${userName}" نهائياً؟`)) {
       onUpdateUsers(users.filter(u => u.id !== userId));
+      toast(`تم حذف حساب الموظف "${userName}" بنجاح.`, 'success');
     }
   };
 
@@ -174,7 +188,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({
           </p>
         </div>
 
-        {currentUserRole === 'admin' && (
+        {currentUserCanManageUsers && (
           <button
             onClick={handleOpenAdd}
             className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
@@ -184,11 +198,11 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({
         )}
       </div>
 
-      {currentUserRole !== 'admin' ? (
+      {!currentUserCanManageUsers ? (
         <div className="bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 p-4 rounded-xl text-xs font-semibold flex items-start gap-2">
           <ShieldAlert size={16} className="shrink-0 mt-0.5" />
           <span>
-            لقد تم حجب ميزة التحكم بالمستخدمين وتغيير كلمات المرور لأن دورك الحالي هو <strong>كاشير</strong>. يرجى التبديل لدور مدير النظام أولاً من البطاقة السابقة للوصول الكامل.
+            لقد تم حجب ميزة التحكم بالمستخدمين وتغيير كلمات المرور لأن حسابك الحالي غير مخوّل بإدارة حسابات الموظفين. يرجى مراجعة مدير النظام لمنحك الصلاحيات اللازمة.
           </span>
         </div>
       ) : null}
@@ -269,26 +283,35 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({
             </div>
 
             {/* Actions */}
-            {currentUserRole === 'admin' && (
-              <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800/60 flex gap-2 justify-end">
-                <button
-                  onClick={() => handleOpenEdit(user)}
-                  className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-lg transition cursor-pointer"
-                  title="تعديل الحساب والصلاحيات"
-                >
-                  <Edit3 size={14} />
-                </button>
-                {user.id !== 'user_admin' && (
+            <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800/60 flex gap-2 justify-end items-center">
+              {currentUserCanManageUsers ? (
+                <>
                   <button
-                    onClick={() => handleDeleteUser(user.id, user.name)}
-                    className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition cursor-pointer"
-                    title="حذف الموظف"
+                    onClick={() => handleOpenEdit(user)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-950/20 dark:hover:bg-blue-950/40 rounded-xl transition cursor-pointer border border-blue-200/50 dark:border-blue-800/40"
+                    title="تعديل اسم الموظف، كلمة المرور، والصلاحيات"
                   >
-                    <Trash2 size={14} />
+                    <Edit3 size={12} />
+                    <span>تعديل الاسم والصلاحيات وكلمة المرور</span>
                   </button>
-                )}
-              </div>
-            )}
+                  {user.id !== 'user_admin' && (
+                    <button
+                      onClick={() => handleDeleteUser(user.id, user.name)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-500 hover:text-rose-600 bg-rose-50 hover:bg-rose-100 dark:text-rose-400 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 rounded-xl transition cursor-pointer border border-rose-200/50 dark:border-rose-800/40"
+                      title="حذف الموظف"
+                    >
+                      <Trash2 size={12} />
+                      <span>حذف</span>
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 w-full justify-center bg-slate-50 dark:bg-slate-900/50 py-2 px-3 rounded-xl border border-slate-200/40 dark:border-slate-800/60 leading-relaxed">
+                  <Lock size={12} className="text-amber-500" />
+                  <span>تعديل الصلاحيات متاح فقط للموظفين المخولين بذلك</span>
+                </div>
+              )}
+            </div>
           </div>
         ))}
       </div>

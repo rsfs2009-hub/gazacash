@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Group, Item, Branch, BranchStock, CustomerSupplier, Sale, Purchase, SalesReturn, PurchaseReturn, Quotation, BranchTransfer, ItemMovement, AuditLogEntry, Currency, Appointment, UserAccount } from './types';
+import { Group, Item, Branch, BranchStock, CustomerSupplier, Sale, Purchase, SalesReturn, PurchaseReturn, Quotation, BranchTransfer, ItemMovement, AuditLogEntry, Currency, Appointment, UserAccount, FirewallSettings, SecurityAlert } from './types';
 
 export const INITIAL_USERS: UserAccount[] = [
   {
@@ -36,6 +36,15 @@ export const INITIAL_USERS: UserAccount[] = [
   }
 ];
 
+export const DEFAULT_FIREWALL_SETTINGS: FirewallSettings = {
+  enabled: true,
+  maxAttempts: 3,
+  lockoutDuration: 5,
+  highSecurityMode: false,
+  blockedIps: [],
+  whitelistedIps: ['127.0.0.1', '192.168.1.1']
+};
+
 export interface GroupData {
   items: Item[];
   branches: Branch[];
@@ -53,6 +62,8 @@ export interface GroupData {
   selectedCurrencyId?: string;
   appointments?: Appointment[];
   users?: UserAccount[];
+  firewallSettings?: FirewallSettings;
+  securityAlerts?: SecurityAlert[];
 }
 
 const DEFAULT_GROUPS: Group[] = [
@@ -443,7 +454,7 @@ const getInitialFoodsData = (): GroupData => {
     }
   ];
 
-  return { items, branches, branchStock, contacts, sales, purchases, returns, purchaseReturns: [], quotations, transfers, movements, auditLogs, users: INITIAL_USERS };
+  return { items, branches, branchStock, contacts, sales, purchases, returns, purchaseReturns: [], quotations, transfers, movements, auditLogs, users: INITIAL_USERS, firewallSettings: DEFAULT_FIREWALL_SETTINGS, securityAlerts: [] };
 };
 
 // Initial dummy data for Electrical Group
@@ -629,7 +640,7 @@ const getInitialElectricalData = (): GroupData => {
     }
   ];
 
-  return { items, branches, branchStock, contacts, sales, purchases, returns, purchaseReturns: [], quotations, transfers, movements, auditLogs, users: INITIAL_USERS };
+  return { items, branches, branchStock, contacts, sales, purchases, returns, purchaseReturns: [], quotations, transfers, movements, auditLogs, users: INITIAL_USERS, firewallSettings: DEFAULT_FIREWALL_SETTINGS, securityAlerts: [] };
 };
 
 // DB API functions with LocalStorage caching
@@ -708,7 +719,9 @@ export const getGroupData = (groupId: string): GroupData => {
       movements: [],
       auditLogs: [],
       appointments: [],
-      users: INITIAL_USERS
+      users: INITIAL_USERS,
+      firewallSettings: DEFAULT_FIREWALL_SETTINGS,
+      securityAlerts: []
     };
   }
   

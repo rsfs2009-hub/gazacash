@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Users, UserPlus, FileText, Printer, ShieldAlert, DollarSign, ArrowUpRight, ArrowDownLeft, Trash2, Plus, Pencil } from 'lucide-react';
+import { Users, UserPlus, FileText, Printer, ShieldAlert, DollarSign, ArrowUpRight, ArrowDownLeft, Trash2, Plus, Pencil, X } from 'lucide-react';
 import { CustomerSupplier, CustomerSupplierStatement, Sale, Purchase, SalesReturn } from '../types';
 
 interface ContactsProps {
@@ -16,16 +16,73 @@ interface ContactsProps {
   onUpdateContact: (id: string, contact: Partial<CustomerSupplier>) => void;
   onRecordPayment: (contactId: string, amount: number, type: 'receipt' | 'payment', notes: string) => void; // Receipt = customer pays us (reduces debit), Payment = we pay supplier (reduces credit)
   initialTab?: 'list' | 'ledger';
+  onTabChange?: (tab: 'list' | 'ledger') => void;
 }
 
-export default function Contacts({ contacts, sales, purchases, returns, onAddContact, onUpdateContact, onRecordPayment, initialTab }: ContactsProps) {
+export default function Contacts({ contacts, sales, purchases, returns, onAddContact, onUpdateContact, onRecordPayment, initialTab, onTabChange }: ContactsProps) {
   const [activeTab, setActiveTab] = React.useState<'list' | 'ledger'>(initialTab || 'list');
+
+  // Helper for dynamic premium toasts
+  const toast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success') => {
+    if ((window as any).showToast) {
+      (window as any).showToast(message, type);
+    } else {
+      alert(message);
+    }
+  };
 
   React.useEffect(() => {
     if (initialTab) {
       setActiveTab(initialTab);
     }
   }, [initialTab]);
+
+  const handleTabChange = (tab: 'list' | 'ledger') => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
+
+  // View transaction state for detailed account statement
+  const [viewingTx, setViewingTx] = useState<any | null>(null);
+  const [viewingTxType, setViewingTxType] = useState<'sale' | 'purchase' | 'return' | null>(null);
+
+  // Helper function to handle statement row clicks
+  const handleStatementLineClick = (line: CustomerSupplierStatement) => {
+    if (line.referenceNo === 'START') return;
+
+    if (line.type.includes('مبيعات')) {
+      const sale = sales.find(s => s.invoiceNo === line.referenceNo);
+      if (sale) {
+        setViewingTx(sale);
+        setViewingTxType('sale');
+      }
+    } else if (line.type.includes('مشتريات')) {
+      const purchase = purchases.find(p => p.invoiceNo === line.referenceNo);
+      if (purchase) {
+        setViewingTx(purchase);
+        setViewingTxType('purchase');
+      }
+    } else if (line.type.includes('دفعة')) {
+      // Find the associated invoice
+      const sale = sales.find(s => s.invoiceNo === line.referenceNo);
+      if (sale) {
+        setViewingTx(sale);
+        setViewingTxType('sale');
+      } else {
+        const purchase = purchases.find(p => p.invoiceNo === line.referenceNo);
+        if (purchase) {
+          setViewingTx(purchase);
+          setViewingTxType('purchase');
+        }
+      }
+    } else if (line.type.includes('مرتجع')) {
+      const ret = returns.find(r => r.returnNo === line.referenceNo);
+      if (ret) {
+        setViewingTx(ret);
+        setViewingTxType('return');
+      }
+    }
+  };
 
   // Add contact form states
   const [contactName, setContactName] = useState('');
@@ -51,7 +108,7 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
     setContactPhone(contact.phone || '');
     setContactAddress(contact.address || '');
     setInitialBalance(contact.initialBalance);
-    setActiveTab('list');
+    handleTabChange('list');
 
     // Smooth scroll to the form container with slight delay to ensure tab switch is complete
     setTimeout(() => {
@@ -77,10 +134,10 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
     if (selectedEditContactId) {
       onUpdateContact(selectedEditContactId, contactPayload);
       setSelectedEditContactId(null);
-      alert('تم تحديث بيانات الحساب التجاري بنجاح!');
+      toast('تم تحديث بيانات الحساب التجاري بنجاح! 💾', 'success');
     } else {
       onAddContact(contactPayload);
-      alert('تم إضافة الحساب التجاري الجديد للمجموعة بنجاح!');
+      toast('تم إضافة الحساب التجاري الجديد للمجموعة بنجاح! 🎉', 'success');
     }
 
     setContactName('');
@@ -92,7 +149,7 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
   const handlePaymentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedContactId || paymentAmount <= 0) {
-      alert('الرجاء تعبئة قيمة السند واختيار الاسم');
+      toast('الرجاء تعبئة قيمة السند واختيار الاسم', 'warning');
       return;
     }
 
@@ -102,7 +159,7 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
     setSelectedContactId('');
     setPaymentAmount(0);
     setPaymentNotes('');
-    alert('تم تسجيل سند القبض/الصرف المالي وتحديث أرصدة الحسابات بنجاح!');
+    toast('تم تسجيل سند القبض/الصرف المالي وتحديث أرصدة الحسابات بنجاح! 💵', 'success');
   };
 
   // Helper: Build the detailed account statement for the selected ledger contact
@@ -231,13 +288,13 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
       {/* Navigation subtabs */}
       <div className="flex border-b border-slate-200 dark:border-slate-800 gap-4 overflow-x-auto no-scrollbar pb-1 no-print">
         <button
-          onClick={() => setActiveTab('list')}
+          onClick={() => handleTabChange('list')}
           className={`pb-3 font-bold text-sm transition-all relative flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${activeTab === 'list' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           <Users size={16} /> قائمة العملاء والموردين والحسابات
         </button>
         <button
-          onClick={() => setActiveTab('ledger')}
+          onClick={() => handleTabChange('ledger')}
           className={`pb-3 font-bold text-sm transition-all relative flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${activeTab === 'ledger' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
           id="account_statement_card"
         >
@@ -526,7 +583,10 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
 
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={() => {
+                  (window as any)._printTargetSelector = '.print-report-wrapper';
+                  window.print();
+                }}
                 className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow cursor-pointer flex items-center gap-1"
               >
                 <Printer size={12} /> طباعة الكشف
@@ -536,7 +596,7 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
 
           {/* Account Ledger report presentation */}
           {ledgerContact ? (
-            <div className="space-y-4">
+            <div className="print-report-wrapper space-y-4 bg-white dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-800">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-slate-200 dark:border-slate-800 pb-4 gap-4">
                 <div>
                   <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-full">كشف حساب مفصل ومعتمد</span>
@@ -578,11 +638,16 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
                         const formattedBalance = Math.abs(line.runningBalance).toFixed(2);
                         
                         return (
-                          <tr key={idx} className="hover:bg-slate-500/5 transition">
+                          <tr 
+                            key={idx} 
+                            onClick={() => handleStatementLineClick(line)}
+                            className={`transition ${line.referenceNo !== 'START' ? 'cursor-pointer hover:bg-emerald-500/10 dark:hover:bg-emerald-500/5 hover:text-emerald-600 dark:hover:text-emerald-400' : 'hover:bg-slate-500/5'}`}
+                            title={line.referenceNo !== 'START' ? 'اضغط لعرض تفاصيل المستند والحركة بالكامل 🔍' : ''}
+                          >
                             <td className="py-2.5 pr-2 font-mono text-slate-500">
                               {line.referenceNo === 'START' ? 'بداية النشاط' : new Date(line.date).toLocaleDateString('ar-EG')}
                             </td>
-                            <td className="py-2.5 font-bold text-slate-800 dark:text-slate-200">{line.type}</td>
+                            <td className="py-2.5 font-bold">{line.type}</td>
                             <td className="py-2.5 text-center font-mono font-bold">{line.referenceNo}</td>
                             <td className="py-2.5 text-center font-mono font-bold text-red-600">
                               {line.debit > 0 ? line.debit.toFixed(2) : '-'}
@@ -608,6 +673,149 @@ export default function Contacts({ contacts, sales, purchases, returns, onAddCon
               يرجى إضافة حساب عميل أو مورد لاستعراض كشف الحساب المفصل له.
             </div>
           )}
+        </div>
+      )}
+
+      {/* Transaction details modal in Contacts */}
+      {viewingTx && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print overflow-y-auto">
+          <div className="print-invoice-wrapper bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 p-6 space-y-6 relative max-h-[90vh] overflow-y-auto">
+            {/* Close Button */}
+            <button
+              onClick={() => { setViewingTx(null); setViewingTxType(null); }}
+              className="absolute top-4 left-4 p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-700 dark:text-slate-400 cursor-pointer no-print transition"
+            >
+              <X size={16} />
+            </button>
+
+            {/* Invoice Header */}
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-4 text-right space-y-4">
+              <div className="flex justify-between items-start">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full uppercase">
+                    {viewingTxType === 'sale' ? 'فاتورة مبيعات معتمدة' : viewingTxType === 'purchase' ? 'سند توريد مشتريات' : 'سند مرتجع مبيعات'}
+                  </span>
+                  <h3 className="font-extrabold text-lg text-slate-950 dark:text-white">
+                    {viewingTxType === 'return' ? 'رقم السند: ' : 'رقم الفاتورة: '}<span className="font-mono">{viewingTxType === 'return' ? viewingTx.returnNo : viewingTx.invoiceNo}</span>
+                  </h3>
+                  <p className="text-xs text-slate-500">{new Date(viewingTx.date).toLocaleString('ar-EG')}</p>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white font-extrabold text-lg shadow-sm">
+                    غك
+                  </div>
+                  <div className="text-left font-bold text-xs text-slate-400">غزة كاش ERP</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 pt-2 text-xs">
+                <div className="space-y-1">
+                  <span className="text-slate-400 block font-bold">موقع المستودع / الفرع:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100">{viewingTx.branchName || 'الفرع الرئيسي'}</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-slate-400 block font-bold">{viewingTxType === 'sale' || viewingTxType === 'return' ? 'العميل المستلم:' : 'المورد المورد:'}</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100">
+                    {viewingTxType === 'sale' || viewingTxType === 'return' ? viewingTx.customerName : viewingTx.supplierName}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Invoice Items Table */}
+            <div className="space-y-2">
+              <h4 className="font-bold text-xs text-slate-500">تفاصيل السلع والأصناف المدرجة:</h4>
+              <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-xl">
+                <table className="w-full text-right text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                      <th className="p-2.5 font-bold">اسم الصنف</th>
+                      <th className="p-2.5 text-center font-bold">الوحدة المستخدمة</th>
+                      <th className="p-2.5 text-center font-bold">الكمية</th>
+                      <th className="p-2.5 text-center font-bold">سعر الوحدة</th>
+                      <th className="p-2.5 text-left pl-3 font-bold">الإجمالي</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
+                    {viewingTx.items && viewingTx.items.map((item: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-slate-500/5 transition">
+                        <td className="p-2.5 font-semibold">{item.itemName}</td>
+                        <td className="p-2.5 text-center text-slate-500">{item.unitName}</td>
+                        <td className="p-2.5 text-center font-mono font-bold">{item.quantity}</td>
+                        <td className="p-2.5 text-center font-mono">{item.price.toFixed(2)}</td>
+                        <td className="p-2.5 text-left pl-3 font-mono font-bold text-slate-900 dark:text-white">{(item.quantity * item.price).toFixed(2)} ₪</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Invoice Summary and Footer */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div className="space-y-1.5 text-xs text-slate-500 italic">
+                <span className="font-bold text-slate-400 block not-italic">ملاحظات الحركة:</span>
+                {viewingTx.notes || 'لا يوجد ملاحظات إضافية مسجلة على هذه الحركة.'}
+              </div>
+
+              <div className="space-y-2 text-xs">
+                {viewingTxType !== 'return' && (
+                  <>
+                    <div className="flex justify-between items-center text-slate-500">
+                      <span>المجموع قبل الخصم:</span>
+                      <span className="font-mono">{viewingTx.subTotal ? viewingTx.subTotal.toFixed(2) : viewingTx.total.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-500">
+                      <span>قيمة الخصم الممنوح:</span>
+                      <span className="font-mono text-red-500">-{viewingTx.discount ? viewingTx.discount.toFixed(2) : '0.00'}</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex justify-between items-center font-bold text-sm text-slate-900 dark:text-white border-t border-dashed border-slate-200 dark:border-slate-800 pt-2">
+                  <span>صافي قيمة الحركة النهائي:</span>
+                  <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                    {viewingTx.total.toFixed(2)} ₪
+                  </span>
+                </div>
+                {viewingTxType !== 'return' && (
+                  <>
+                    <div className="flex justify-between items-center text-slate-500">
+                      <span>المبلغ المدفوع (نقداً):</span>
+                      <span className="font-mono text-slate-900 dark:text-white">
+                        {viewingTx.paidAmount ? viewingTx.paidAmount.toFixed(2) : viewingTx.total.toFixed(2)} ₪
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center font-bold text-xs text-slate-500">
+                      <span>المتبقي في حساب الذمم:</span>
+                      <span className={`font-mono ${viewingTx.total - (viewingTx.paidAmount || viewingTx.total) > 0 ? 'text-amber-500' : 'text-slate-400'}`}>
+                        {(viewingTx.total - (viewingTx.paidAmount || viewingTx.total)).toFixed(2)} ₪
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 no-print">
+              <button
+                onClick={() => { setViewingTx(null); setViewingTxType(null); }}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs cursor-pointer transition"
+              >
+                إغلاق النافذة
+              </button>
+              <button
+                onClick={() => {
+                  (window as any)._printTargetSelector = '.fixed .print-invoice-wrapper';
+                  window.print();
+                }}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-5 py-2 rounded-xl shadow cursor-pointer transition flex items-center gap-1.5"
+              >
+                <Printer size={14} /> طباعة المستند
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

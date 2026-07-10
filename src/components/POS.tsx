@@ -40,6 +40,15 @@ export default function POS({
 }: POSProps) {
   const currency = activeCurrency || { id: 'ILS', name: 'شيكل', symbol: '₪', exchangeRate: 1, isBase: true };
 
+  // Helper for dynamic premium toasts
+  const toast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success') => {
+    if ((window as any).showToast) {
+      (window as any).showToast(message, type);
+    } else {
+      alert(message);
+    }
+  };
+
   // POS States
   const [cart, setCart] = useState<{
     item: Item;
@@ -93,7 +102,7 @@ export default function POS({
   const handleFastAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!itemName) {
-      alert('يرجى إدخال اسم الصنف');
+      toast('يرجى إدخال اسم الصنف', 'warning');
       return;
     }
     const finalBarcode = itemBarcode.trim() || `625${Math.floor(1000000 + Math.random() * 9000000)}`;
@@ -117,7 +126,7 @@ export default function POS({
         minStockAlert: +(itemMinStock || 5)
       }, +(itemInitialStock || 0), activeBranch);
 
-      alert(`تم إضافة الصنف الجديد "${itemName}" بنجاح وتغذيته للمستودع!`);
+      toast(`تم إضافة الصنف الجديد "${itemName}" بنجاح وتغذيته للمستودع! 📦`, 'success');
       // Reset Item form
       setItemName('');
       setItemBarcode('');
@@ -139,7 +148,7 @@ export default function POS({
   const handleFastAddCustomer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName) {
-      alert('يرجى كتابة اسم العميل');
+      toast('يرجى كتابة اسم العميل', 'warning');
       return;
     }
     if (onAddContact) {
@@ -150,7 +159,7 @@ export default function POS({
         address: customerAddress,
         initialBalance: +(customerInitialBalance || 0)
       });
-      alert(`تم إضافة العميل الجديد "${customerName}" بنجاح!`);
+      toast(`تم إضافة العميل الجديد "${customerName}" بنجاح! 👤`, 'success');
       // Reset Customer form
       setCustomerName('');
       setCustomerPhone('');
@@ -173,7 +182,7 @@ export default function POS({
         finalCustName = custObj ? custObj.name : 'زبون عام';
       } else {
         if (!appCustomerName) {
-          alert('يرجى كتابة اسم العميل للموعد أو اختيار عميل مسجل');
+          toast('يرجى كتابة اسم العميل للموعد أو اختيار عميل مسجل', 'warning');
           return;
         }
         finalCustId = 'cust_anonymous';
@@ -193,7 +202,7 @@ export default function POS({
         notes: appNotes,
         type: appType
       });
-      alert(`تم تسجيل وجدولة الموعد للعميل "${finalCustName}" بنجاح!`);
+      toast(`تم تسجيل وجدولة الموعد للعميل "${finalCustName}" بنجاح! 🗓️`, 'success');
       // Reset Appointment form
       setAppCustomerId('');
       setAppCustomerName('');
@@ -351,7 +360,7 @@ export default function POS({
 
   const handleCheckout = () => {
     if (cart.length === 0) {
-      alert('السلة فارغة! الرجاء إضافة أصناف أولاً.');
+      toast('السلة فارغة! الرجاء إضافة أصناف أولاً.', 'warning');
       return;
     }
 
@@ -359,7 +368,7 @@ export default function POS({
     const customer = contacts.find(c => c.id === selectedCustomerId);
 
     if (paymentType === 'credit' && !selectedCustomerId) {
-      alert('الرجاء اختيار عميل لعمليات البيع الآجل.');
+      toast('الرجاء اختيار عميل لعمليات البيع الآجل.', 'warning');
       return;
     }
 

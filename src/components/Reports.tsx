@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { BarChart3, Download, Printer, Search, TrendingUp, TrendingDown, DollarSign, Wallet, ArrowDownLeft, AlertOctagon, HelpCircle, X, Scale, Calculator, FileSpreadsheet, Layers } from 'lucide-react';
-import { Sale, Purchase, CustomerSupplier, Item, Branch, Currency } from '../types';
+import { BarChart3, Download, Printer, Search, TrendingUp, TrendingDown, DollarSign, Wallet, ArrowDownLeft, AlertOctagon, HelpCircle, X, Scale, Calculator, FileSpreadsheet, Layers, FileText } from 'lucide-react';
+import { Sale, Purchase, CustomerSupplier, Item, Branch, Currency, ShopSettings } from '../types';
 
 interface ReportsProps {
   sales: Sale[];
@@ -23,6 +23,8 @@ interface ReportsProps {
   showInvoiceDate?: boolean;
   showInvoiceBranch?: boolean;
   showInvoiceLogo?: boolean;
+  shopSettings?: ShopSettings;
+  onTabChange?: (tab: 'sales' | 'purchases' | 'accounts' | 'stock' | 'trial-balance' | 'final-accounts' | 'profits') => void;
 }
 
 export default function Reports({
@@ -40,7 +42,9 @@ export default function Reports({
   movements = [],
   showInvoiceDate = true,
   showInvoiceBranch = true,
-  showInvoiceLogo = true
+  showInvoiceLogo = true,
+  shopSettings,
+  onTabChange
 }: ReportsProps) {
   const [activeReportTab, setActiveReportTab] = useState<'sales' | 'purchases' | 'accounts' | 'stock' | 'trial-balance' | 'final-accounts' | 'profits'>('sales');
 
@@ -49,6 +53,11 @@ export default function Reports({
       setActiveReportTab(initialTab);
     }
   }, [initialTab]);
+
+  const handleTabChange = (tab: 'sales' | 'purchases' | 'accounts' | 'stock' | 'trial-balance' | 'final-accounts' | 'profits') => {
+    setActiveReportTab(tab);
+    onTabChange?.(tab);
+  };
 
   // View invoice/transaction modal states
   const [selectedTx, setSelectedTx] = useState<Sale | Purchase | null>(null);
@@ -256,43 +265,43 @@ export default function Reports({
       {/* Reports tab navigation */}
       <div className="flex border-b border-slate-200 dark:border-slate-800 gap-4 overflow-x-auto no-scrollbar pb-1 no-print">
         <button
-          onClick={() => setActiveReportTab('sales')}
+          onClick={() => handleTabChange('sales')}
           className={`pb-3 font-bold text-sm transition-all relative cursor-pointer whitespace-nowrap ${activeReportTab === 'sales' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           كشف المبيعات وفلترتها
         </button>
         <button
-          onClick={() => setActiveReportTab('purchases')}
+          onClick={() => handleTabChange('purchases')}
           className={`pb-3 font-bold text-sm transition-all relative cursor-pointer whitespace-nowrap ${activeReportTab === 'purchases' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           جرد وتدقيق المشتريات
         </button>
         <button
-          onClick={() => setActiveReportTab('accounts')}
+          onClick={() => handleTabChange('accounts')}
           className={`pb-3 font-bold text-sm transition-all relative cursor-pointer whitespace-nowrap ${activeReportTab === 'accounts' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           ميزان أرصدة الحسابات الإجمالية
         </button>
         <button
-          onClick={() => setActiveReportTab('trial-balance')}
+          onClick={() => handleTabChange('trial-balance')}
           className={`pb-3 font-bold text-sm transition-all relative cursor-pointer whitespace-nowrap ${activeReportTab === 'trial-balance' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           ميزان المراجعة (Trial Balance)
         </button>
          <button
-          onClick={() => setActiveReportTab('profits')}
+          onClick={() => handleTabChange('profits')}
           className={`pb-3 font-bold text-sm transition-all relative cursor-pointer whitespace-nowrap ${activeReportTab === 'profits' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           تقرير الأرباح والتحليلات الاحترافي
         </button>
         <button
-          onClick={() => setActiveReportTab('final-accounts')}
+          onClick={() => handleTabChange('final-accounts')}
           className={`pb-3 font-bold text-sm transition-all relative cursor-pointer whitespace-nowrap ${activeReportTab === 'final-accounts' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           الميزانية الختامية والأصول
         </button>
         <button
-          onClick={() => setActiveReportTab('stock')}
+          onClick={() => handleTabChange('stock')}
           className={`pb-3 font-bold text-sm transition-all relative cursor-pointer whitespace-nowrap ${activeReportTab === 'stock' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
         >
           أصناف تحت حد الطلب والنفاذ
@@ -301,7 +310,7 @@ export default function Reports({
 
       {/* 1. REPORT: SALES */}
       {activeReportTab === 'sales' && (
-        <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+        <div className="print-report-wrapper rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
           {/* Filters */}
           <div className="grid grid-cols-1 md:grid-cols-6 gap-3 bg-slate-500/5 p-4 rounded-xl border border-white/10 no-print">
             <div className="space-y-1">
@@ -429,7 +438,7 @@ export default function Reports({
 
       {/* 2. REPORT: PURCHASES */}
       {activeReportTab === 'purchases' && (
-        <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+        <div className="print-report-wrapper rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
           {/* Filters */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 bg-slate-500/5 p-4 rounded-xl border border-white/10 no-print">
             <div className="space-y-1">
@@ -484,7 +493,10 @@ export default function Reports({
                 <Download size={14} /> إكسل
               </button>
               <button
-                onClick={() => window.print()}
+                onClick={() => {
+                  (window as any)._printTargetSelector = '.print-report-wrapper';
+                  window.print();
+                }}
                 className="flex-1 py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
               >
                 <Printer size={14} /> طباعة
@@ -539,7 +551,7 @@ export default function Reports({
 
       {/* 3. REPORT: ACCOUNTS BALANCE */}
       {activeReportTab === 'accounts' && (
-        <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+        <div className="print-report-wrapper rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
           <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800/80">
             <h3 className="font-bold text-md text-slate-800 dark:text-slate-100">ميزان مراجعة أرصدة الذمم الإجمالية</h3>
             <button
@@ -600,7 +612,7 @@ export default function Reports({
 
       {/* 4. REPORT: STOCK ALERT */}
       {activeReportTab === 'stock' && (
-        <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+        <div className="print-report-wrapper rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
           <h3 className="font-bold text-md text-red-500 flex items-center gap-1 pb-2 border-b border-slate-100 dark:border-slate-800/80">
             <AlertOctagon size={18} /> قائمة إنذار وتنبيهات نفاد المخزون الجاري
           </h3>
@@ -795,7 +807,7 @@ export default function Reports({
         })).sort((a, b) => b.profit - a.profit).slice(0, 5);
 
         return (
-          <div className="space-y-6">
+          <div className="print-report-wrapper space-y-6">
             {/* Overview Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 no-print">
               <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/40 dark:from-emerald-950/20 dark:to-emerald-900/10 p-5 rounded-2xl border border-emerald-200/50 dark:border-emerald-800/40 space-y-2">
@@ -1211,13 +1223,16 @@ export default function Reports({
         totalEndingCredit += invEndingCredit;
 
         return (
-          <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
+          <div className="print-report-wrapper rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800/80">
               <h3 className="font-bold text-md text-emerald-500 flex items-center gap-1.5">
                 <Scale size={18} /> ميزان المراجعة المحاسبي العام للأرصدة والحركات
               </h3>
               <button
-                onClick={() => window.print()}
+                onClick={() => {
+                  (window as any)._printTargetSelector = '.print-report-wrapper';
+                  window.print();
+                }}
                 className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow cursor-pointer transition flex items-center gap-1.5 no-print"
               >
                 <Printer size={12} /> طباعة ميزان المراجعة
@@ -1390,7 +1405,7 @@ export default function Reports({
         const totalLiabilitiesAndEquity = accountsPayable + initialCapital + netProfit;
 
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="print-report-wrapper grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Income Statement */}
             <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
               <h3 className="font-bold text-md text-emerald-500 flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-slate-800/80">
@@ -1651,10 +1666,34 @@ export default function Reports({
                 إغلاق النافذة
               </button>
               <button
-                onClick={() => window.print()}
+                onClick={() => {
+                  (window as any)._printTargetSelector = '.fixed .print-invoice-wrapper';
+                  window.print();
+                }}
                 className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-5 py-2 rounded-xl shadow cursor-pointer transition flex items-center gap-1.5"
               >
                 <Printer size={14} /> طباعة الفاتورة أو التقرير
+              </button>
+              <button
+                onClick={async () => {
+                  const { usePrint } = await import('../utils/usePrint');
+                  const { exportInvoiceToPDF } = usePrint();
+                  const settings = {
+                    name: shopSettings?.name || 'غزة كاش ERP',
+                    address: shopSettings?.address || 'غزة، فلسطين',
+                    phone: shopSettings?.phone || '',
+                    logoText: shopSettings?.logoText || 'غك'
+                  };
+                  await exportInvoiceToPDF(
+                    selectedTx,
+                    selectedTxType as any,
+                    settings,
+                    activeCurrency?.symbol || '₪'
+                  );
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-5 py-2 rounded-xl shadow cursor-pointer transition flex items-center gap-1.5"
+              >
+                <FileText size={14} /> تصدير PDF رسمي 📄
               </button>
             </div>
           </div>
@@ -1815,10 +1854,96 @@ export default function Reports({
                 إغلاق المعاينة
               </button>
               <button
-                onClick={() => window.print()}
+                onClick={() => {
+                  (window as any)._printTargetSelector = '.fixed .print-report-wrapper';
+                  window.print();
+                }}
                 className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-5 py-2 rounded-xl shadow cursor-pointer transition flex items-center gap-1.5"
               >
                 <Printer size={14} /> طباعة الكشف الآن
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const { usePrint } = await import('../utils/usePrint');
+                  const { exportReportToPDF } = usePrint();
+                  
+                  // Construct Headers
+                  const reportHeaders: string[] = ['رقم الفاتورة'];
+                  const widths: string[] = ['15%'];
+                  
+                  if (showInvoiceDate) {
+                    reportHeaders.push('تاريخ ووقت المعاملة');
+                    widths.push('20%');
+                  }
+                  
+                  reportHeaders.push('العميل المستلم');
+                  widths.push('20%');
+                  
+                  if (showInvoiceBranch) {
+                    reportHeaders.push('موقع الفرع');
+                    widths.push('15%');
+                  }
+                  
+                  reportHeaders.push('نوع الدفع', 'الصافي', 'المدفوع كاش', 'المتبقي ذمم');
+                  widths.push('10%', '10%', '10%', '10%');
+                  
+                  // Construct Rows
+                  const reportRows = filteredSales.map(s => {
+                    const remaining = s.total - s.paidAmount;
+                    const saleCurr = currList.find(c => c.id === getSaleCurrencyId(s)) || baseCurrency;
+                    const row: string[] = [s.invoiceNo];
+                    
+                    if (showInvoiceDate) {
+                      row.push(new Date(s.date).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }));
+                    }
+                    
+                    row.push(s.customerName || 'زبون نقدي عام');
+                    
+                    if (showInvoiceBranch) {
+                      row.push(s.branchName || 'الفرع الرئيسي');
+                    }
+                    
+                    row.push(
+                      s.paymentType === 'cash' ? 'نقدي' : 'آجل',
+                      `${s.total.toFixed(2)} ${saleCurr.symbol}`,
+                      `${s.paidAmount.toFixed(2)} ${saleCurr.symbol}`,
+                      remaining > 0 ? `${remaining.toFixed(2)} ${saleCurr.symbol}` : 'خالص'
+                    );
+                    
+                    return row;
+                  });
+                  
+                  // Aggregate totals
+                  const totalSum = filteredSales.reduce((acc, s) => acc + s.total, 0);
+                  const paidSum = filteredSales.reduce((acc, s) => acc + s.paidAmount, 0);
+                  const remainingSum = totalSum - paidSum;
+                  
+                  const reportTotals = [
+                    { label: 'إجمالي المبيعات:', value: `${totalSum.toFixed(2)} ${baseCurrency.symbol}` },
+                    { label: 'المقبوض كاش:', value: `${paidSum.toFixed(2)} ${baseCurrency.symbol}` },
+                    { label: 'المتبقي ذمم:', value: `${remainingSum.toFixed(2)} ${baseCurrency.symbol}`, isFinal: true }
+                  ];
+                  
+                  const settings = {
+                    name: shopSettings?.name || 'غزة كاش ERP',
+                    address: shopSettings?.address || 'غزة، فلسطين',
+                    phone: shopSettings?.phone || ''
+                  };
+                  
+                  await exportReportToPDF(
+                    'تقرير حركة المبيعات وتفاصيل الفواتير',
+                    `كشف للفترة الحالية يضم ${filteredSales.length} فواتير مبيعات صادرة`,
+                    reportHeaders,
+                    reportRows,
+                    widths,
+                    reportTotals,
+                    settings
+                  );
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-5 py-2 rounded-xl shadow cursor-pointer transition flex items-center gap-1.5"
+              >
+                <FileText size={14} /> تصدير الكشف كـ PDF 📄
               </button>
             </div>
           </div>

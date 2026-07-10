@@ -1,6 +1,6 @@
 /**
- * @license
- * SPDX-License-Identifier: Apache-2.0
+ * Gaza Cash - Financial Reports, Analytics & Auditing Engines
+ * Copyright (c) 2026 Gaza Cash Team. All rights reserved.
  */
 
 import React, { useState, useEffect } from 'react';

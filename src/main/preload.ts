@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getUsers: () => ipcRenderer.invoke('auth:getUsers'),
   deleteUser: (userId: number) => ipcRenderer.invoke('auth:deleteUser', userId),
   
-  // استدعاء واجهات الذكاء الاصطناعي Gemini بشكل آمن من الـ Main Process
+  // استدعاء المستشار المالي والذكي المدمج بشكل آمن من الـ Main Process
   callGemini: (prompt: string, options?: any) => ipcRenderer.invoke('ai:gemini', prompt, options),
   
   // النسخ الاحتياطي الآمن والمشفر (تصدير واستيراد)

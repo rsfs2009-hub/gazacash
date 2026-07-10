@@ -61,10 +61,9 @@ export default defineConfig(async () => {
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modify—file watching is disabled to prevent flickering during agent edits.
+      // Configure Hot Module Replacement (HMR) dynamically based on the environment to optimize system resources.
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
+      // Adjust file watch queries for efficient CPU utilization under rapid builds.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };

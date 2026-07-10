@@ -194,7 +194,7 @@ ipcMain.handle('auth:deleteUser', async (event, userId) => {
   }
 });
 
-// 10. تشغيل الـ Gemini API بأمان تام (مفتاح الـ API غير معلن ومحمي بالكامل في الـ Main)
+// 10. تشغيل نظام المستشار الذكي المالي بأمان تام (مفتاح الـ API غير معلن ومحمي بالكامل في الـ Main)
 ipcMain.handle('ai:gemini', async (event, prompt, options = {}) => {
   try {
     // محاولة جلب المفتاح المشفر من قاعدة البيانات الآمنة أولاً، أو الاستعانة ببيئة التشغيل
@@ -204,7 +204,7 @@ ipcMain.handle('ai:gemini', async (event, prompt, options = {}) => {
     if (!apiKey) {
       return { 
         success: false, 
-        error: 'لم يتم العثور على مفتاح تفعيل Gemini API المشفر. يرجى تكوين المفتاح في صفحة إعدادات النظام.' 
+        error: 'لم يتم العثور على مفتاح تفعيل المحرك الذكي المشفر. يرجى تكوين المفتاح في صفحة إعدادات النظام.' 
       };
     }
 

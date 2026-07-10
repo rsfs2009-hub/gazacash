@@ -1,6 +1,6 @@
 /**
- * @license
- * SPDX-License-Identifier: Apache-2.0
+ * Gaza Cash - ERP Local Database Seed & Initial Schema Configurations
+ * Copyright (c) 2026 Gaza Cash Team. All rights reserved.
  */
 
 import { Group, Item, Branch, BranchStock, CustomerSupplier, Sale, Purchase, SalesReturn, PurchaseReturn, Quotation, BranchTransfer, ItemMovement, AuditLogEntry, Currency, Appointment, UserAccount, FirewallSettings, SecurityAlert } from './types';

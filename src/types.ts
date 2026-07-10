@@ -1,6 +1,6 @@
 /**
- * @license
- * SPDX-License-Identifier: Apache-2.0
+ * Gaza Cash - ERP Data Models & Interfaces
+ * Copyright (c) 2026 Gaza Cash Team. All rights reserved.
  */
 
 // Types definition for Gaza Cash (غزة كاش)

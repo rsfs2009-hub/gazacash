@@ -1,6 +1,6 @@
 /**
- * @license
- * SPDX-License-Identifier: Apache-2.0
+ * Gaza Cash ERP - Main Application Wrapper & Controller
+ * Copyright (c) 2026 Gaza Cash Team. All rights reserved.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -3474,11 +3474,11 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Dynamic Gemini AI Advisor Consultation Module */}
+              {/* Dynamic Business Advisor Consultation Module */}
               <div className="rounded-2xl glass-panel-card p-5 border border-white/25 shadow-md space-y-4">
                 <div className="flex justify-between items-center pb-2 border-b border-white/10">
                   <h3 className="font-extrabold text-md text-slate-950 dark:text-white flex items-center gap-1.5">
-                    <Sparkles size={18} className="text-emerald-500" /> مستشار غزة كاش الذكي (توصيات الأعمال بالألمني)
+                    <Sparkles size={18} className="text-emerald-500" /> مستشار غزة كاش الذكي (توصيات الأعمال والتحليل المالي)
                   </h3>
                   
                   <button
@@ -5241,7 +5241,7 @@ export default function App() {
                 <div className="text-center space-y-2">
                   <h4 className="font-bold text-slate-800 dark:text-white text-sm">بيئة التشغيل الحالية تمنع الطباعة المباشرة</h4>
                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    أنت تتصفح تطبيق <span className="font-bold text-emerald-600 dark:text-emerald-400">نظام غزة كاش</span> حالياً من خلال نافذة المعاينة التفاعلية داخل <span className="font-mono">Google AI Studio</span>.
+                    أنت تتصفح تطبيق <span className="font-bold text-emerald-600 dark:text-emerald-400">نظام غزة كاش</span> حالياً من خلال نافذة المعاينة التفاعلية داخل متصفح الويب.
                   </p>
                   <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/10 p-3 rounded-2xl font-bold leading-relaxed">
                     ⚠️ المتصفحات تحظر تفعيل أوامر الطباعة (window.print) تلقائياً داخل نوافذ الـ iFrame لحمايتك. لطباعة أي مستند، كشف حساب، أو فاتورة بسلاسة وبشكل فوري، يرجى فتح النظام في نافذة مستقلة.

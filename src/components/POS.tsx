@@ -1,6 +1,6 @@
 /**
- * @license
- * SPDX-License-Identifier: Apache-2.0
+ * Gaza Cash - Interactive Point of Sale (POS) Cashier Terminal
+ * Copyright (c) 2026 Gaza Cash Team. All rights reserved.
  */
 
 import React, { useState, useEffect, useRef } from 'react';

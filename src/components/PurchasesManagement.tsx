@@ -1,6 +1,6 @@
 /**
- * @license
- * SPDX-License-Identifier: Apache-2.0
+ * Gaza Cash - Purchases Management & Vendor Supply Operations Dashboard
+ * Copyright (c) 2026 Gaza Cash Team. All rights reserved.
  */
 
 import React, { useState, useMemo } from 'react';

@@ -1,6 +1,6 @@
 /**
- * @license
- * SPDX-License-Identifier: Apache-2.0
+ * Gaza Cash - QR Code Offline Generator Utility
+ * Copyright (c) 2026 Gaza Cash Team. All rights reserved.
  */
 
 /**

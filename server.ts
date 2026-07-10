@@ -1,6 +1,6 @@
 /**
- * @license
- * SPDX-License-Identifier: Apache-2.0
+ * Gaza Cash - ERP Business Server
+ * Copyright (c) 2026 Gaza Cash Team. All rights reserved.
  */
 
 import express from 'express';
@@ -31,7 +31,7 @@ function getAiClient(): GoogleGenAI {
       apiKey: key || 'MOCK_KEY',
       httpOptions: {
         headers: {
-          'User-Agent': 'aistudio-build',
+          'User-Agent': 'gaza-cash-desktop',
         }
       }
     });
